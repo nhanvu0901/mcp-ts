@@ -39,7 +39,7 @@ export class AskAgentController {
             return reply.send({
                 success: true,
                 response: agentResponse,
-                userId,
+                user_id: userId,
                 session_id,
                 timestamp: new Date().toISOString()
             });
@@ -60,11 +60,7 @@ export class AskAgentController {
         sessionId: string
     ): Promise<string> {
         try {
-            const agent = request.server.agent;
-
-            if (!agent) {
-                throw new Error('Agent not initialized');
-            }
+            const agent = await request.server.agent;
 
             const context = `User ID: ${userId}, Session: ${sessionId}`;
             const fullPrompt = `${context}\n\nUser Question: ${question}`;

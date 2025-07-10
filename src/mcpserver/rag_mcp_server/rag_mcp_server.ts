@@ -1,8 +1,14 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { AzureOpenAIEmbeddings } from '@langchain/openai';
-import { BaseMCPServer, MCPTool } from '../base-server';
-import { DEFAULT_PORTS, QdrantConfig, EmbeddingConfig } from '../types/types';
+import fastify from 'fastify';
+import cors from '@fastify/cors';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const COLLECTION_NAME = "RAG";
 
@@ -23,13 +29,18 @@ const RetrieveArgsSchema = z.object({
     limit: z.number().default(5).describe("Maximum number of results to return")
 });
 
-class RAGServer extends BaseMCPServer {
-    constructor() {
-        super('RAGService', DEFAULT_PORTS.RAG);
-    }
+const server = new Server({
+    name: 'RAGService',
+    version: '1.0.0',
+}, {
+    capabilities: {
+        tools: {},
+    },
+});
 
-    protected getTools(): MCPTool[] {
-        return [
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+        tools: [
             {
                 name: 'retrieve',
                 description: 'Query the Qdrant vector database with a text query and return matching results',
@@ -49,19 +60,14 @@ class RAGServer extends BaseMCPServer {
                     required: ['query']
                 }
             }
-        ];
-    }
+        ]
+    };
+});
 
-    protected async handleToolCall(toolName: string, args: any) {
-        switch (toolName) {
-            case 'retrieve':
-                return await this.handleRetrieve(args);
-            default:
-                throw new Error(`Unknown tool: ${toolName}`);
-        }
-    }
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
 
-    private async handleRetrieve(args: any) {
+    if (name === 'retrieve') {
         try {
             const { query, limit } = RetrieveArgsSchema.parse(args);
 
@@ -85,22 +91,79 @@ class RAGServer extends BaseMCPServer {
                 }
             }
 
-            return this.createSuccessResponse(results.join('\n'));
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: results.join('\n')
+                    }
+                ]
+            };
 
         } catch (error) {
             console.error('Error during query:', error);
-            return this.createErrorResponse(
-                `Retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-            );
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+                    }
+                ]
+            };
         }
+    }
+
+    throw new Error(`Unknown tool: ${name}`);
+});
+
+server.onerror = (error) => {
+    console.error('[MCP Error]', error);
+};
+
+const app = fastify({
+    logger: {
+        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug'
+    }
+});
+
+async function setupServer() {
+    await app.register(cors, {
+        origin: true,
+        credentials: true
+    });
+
+    app.all('/sse', async (request, reply) => {
+        const transport = new SSEServerTransport('/sse', reply.raw);
+        await server.connect(transport);
+        console.log('New SSE connection established');
+    });
+
+
+    const gracefulShutdown = async (signal: string) => {
+        console.log(`\nReceived ${signal}, shutting down RAGService...`);
+        try {
+            await server.close();
+            await app.close();
+            process.exit(0);
+        } catch (error) {
+            console.error('Error during shutdown:', error);
+            process.exit(1);
+        }
+    };
+
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+    try {
+        await app.listen({
+            host: '0.0.0.0',
+            port: 8002
+        });
+        console.log('RAGService MCP server is running on http://0.0.0.0:8002/sse');
+    } catch (error) {
+        console.error('Error starting RAGService server:', error);
+        process.exit(1);
     }
 }
 
-async function main() {
-    const server = new RAGServer();
-    await server.start();
-}
-
-if (require.main === module) {
-    main().catch(console.error);
-}
+setupServer().catch(console.error);

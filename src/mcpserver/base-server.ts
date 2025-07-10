@@ -123,13 +123,22 @@ export abstract class BaseMCPServer {
     async start() {
         await this.setupFastifyPlugins();
 
-        this.app.get('/sse', async (request: FastifyRequest, reply: FastifyReply) => {
-            const transport = new SSEServerTransport('/sse', reply.raw);
-            await this.server.connect(transport);
+        this.app.all('/sse', async (request: FastifyRequest, reply: FastifyReply) => {
+            try {
+                const transport = new SSEServerTransport('/sse', reply.raw);
+                await this.server.connect(transport);
+            } catch (error) {
+                console.error('SSE connection error:', error);
+                reply.code(500).send({ error: 'SSE connection failed' });
+            }
         });
 
-        this.app.get('/health', async (request: FastifyRequest, reply: FastifyReply) => {
-            return { status: 'healthy', service: this.serviceName };
+        this.app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
+            return {
+                service: this.serviceName,
+                status: 'running',
+                endpoints: ['/sse']
+            };
         });
 
         try {
