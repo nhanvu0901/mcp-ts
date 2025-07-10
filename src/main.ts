@@ -73,10 +73,10 @@ async function setupMCPClient(): Promise<MultiServerMCPClient> {
             url: config.DOCUMENT_MCP_URL,
             transport: 'sse',
         },
-        // RAGService: {
-        //     url: config.RAG_MCP_URL,
-        //     transport: 'sse',
-        // },
+        RAGService: {
+            url: config.RAG_MCP_URL,
+            transport: 'sse',
+        },
         // DocDBSummarizationService: {
         //     url: config.DOCDB_SUMMARIZATION_MCP_URL,
         //     transport: 'sse',

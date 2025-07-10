@@ -1,26 +1,25 @@
 {
   "name": "mcp-servers",
   "version": "1.0.0",
-  "description": "Shared TypeScript MCP Servers with Fastify",
+  "description": "Shared TypeScript MCP Servers with FastMCP",
   "scripts": {
     "dev:rag": "ts-node-dev --respawn --transpile-only rag_mcp_server/rag_mcp_server.ts",
+    "dev:document": "ts-node-dev --respawn --transpile-only document_mcp_server/document_mcp_server.ts",
     "build": "rimraf dist && tsc",
     "build:rag": "rimraf dist/rag_mcp_server && tsc --outDir dist/rag_mcp_server rag_mcp_server/rag_mcp_server.ts",
+    "build:document": "rimraf dist/document_mcp_server && tsc --outDir dist/document_mcp_server document_mcp_server/document_mcp_server.ts",
     "start:rag": "node dist/rag_mcp_server/rag_mcp_server.js",
-    "start:all": "concurrently \"npm run start:rag\"",
-    "dev:all": "concurrently \"npm run dev:rag\"",
+    "start:document": "node dist/document_mcp_server/document_mcp_server.js",
+    "start:all": "concurrently \"npm run start:rag\" \"npm run start:document\"",
+    "dev:all": "concurrently \"npm run dev:rag\" \"npm run dev:document\"",
     "clean": "rimraf dist",
-    "type-check": "tsc --noEmit",
-    "manage": "npx tsx manage.ts"
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "fastmcp": "3.8.4",
     "@qdrant/js-client-rest": "^1.8.2",
     "@langchain/openai": "^0.5.18",
-    "fastify": "^5.4.0",
-    "@fastify/cors": "^11.0.1",
     "dotenv": "^16.4.7",
-    "zod": "^3.25.32",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
