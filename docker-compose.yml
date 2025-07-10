@@ -1,0 +1,93 @@
+services:
+#  fastify-app:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    container_name: fastify-mcp-rag
+#    restart: unless-stopped
+#    ports:
+#      - "3000:3000"
+#    environment:
+#      HOST: 0.0.0.0
+#      PORT: 3000
+#      NODE_ENV: development
+#      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+#      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+#      AZURE_OPENAI_MODEL_NAME: ${AZURE_OPENAI_MODEL_NAME:-gpt-4}
+#      AZURE_OPENAI_MODEL_API_VERSION: ${AZURE_OPENAI_MODEL_API_VERSION:-2024-02-15-preview}
+#      DOCUMENT_MCP_URL: http://document-service:8001/sse
+#      RAG_MCP_URL: http://rag-service:8002/sse
+#      DOCDB_SUMMARIZATION_MCP_URL: http://docdb-service:8003/sse
+#      MAX_FILE_SIZE: 10485760
+#      UPLOAD_DIR: /app/data/uploads
+#      DEFAULT_COLLECTION_NAME: RAG
+#    volumes:
+#      - shared_uploads:/app/data/uploads
+#    depends_on:
+#      - mongodb
+#      - qdrant
+#      - document-service
+#    networks:
+#      - mcp-network
+#
+#  document-service:
+#    build:
+#      context: ./src/python
+#      dockerfile: Dockerfile
+#    container_name: mcp-document-service
+#    restart: unless-stopped
+#    ports:
+#      - "8001:8001"
+#    environment:
+#      MCP_PORT: 8001
+#      MCP_SERVICE_NAME: "Document Service"
+#      MONGODB_URI: ${MONGODB_URI}
+#      MONGODB_DB: ai_assistant
+#      MONGODB_COLLECTION: documents
+#      QDRANT_HOST: qdrant
+#      QDRANT_PORT: 6333
+#      AZURE_OPENAI_EMBEDDING_ENDPOINT: ${AZURE_OPENAI_EMBEDDING_ENDPOINT}
+#      AZURE_OPENAI_EMBEDDING_API_KEY: ${AZURE_OPENAI_EMBEDDING_API_KEY}
+#      AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${AZURE_OPENAI_EMBEDDING_DEPLOYMENT}
+#      AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION: ${AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION}
+#    volumes:
+#      - shared_uploads:/app/data/uploads
+#    depends_on:
+#      - mongodb
+#      - qdrant
+#    networks:
+#      - mcp-network
+
+  mongodb:
+    image: mongo:7.0
+    container_name: mcp-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - mcp-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mcp-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - mcp-network
+
+volumes:
+  shared_uploads:
+  mongodb_data:
+  qdrant_data:
+
+networks:
+  mcp-network:
+    driver: bridge
