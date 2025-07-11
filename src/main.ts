@@ -8,59 +8,72 @@ import swaggerUi from '@fastify/swagger-ui';
 import { AzureChatOpenAI } from '@langchain/openai';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
-import { mkdir, access } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import api from "./routes/index";
 import dotenv from 'dotenv';
 import fp from 'fastify-plugin';
 import errorHandlerPlugin from './plugins/errorHandler.plugin'
+
 dotenv.config();
+
+function cleanEnvVar(value: string | undefined, defaultValue: string = ''): string {
+    if (!value) return defaultValue;
+    return value.replace(/^["']|["']$/g, '').trim();
+}
 
 const config = {
     HOST: process.env.HOST || '0.0.0.0',
     PORT: parseInt(process.env.PORT || '3000'),
     NODE_ENV: process.env.NODE_ENV || 'development',
 
-    AZURE_OPENAI_API_KEY: process.env.AZURE_OPENAI_API_KEY!,
-    AZURE_OPENAI_ENDPOINT: process.env.AZURE_OPENAI_ENDPOINT!,
-    AZURE_OPENAI_MODEL_NAME: process.env.AZURE_OPENAI_MODEL_NAME || 'gpt-4',
-    AZURE_OPENAI_MODEL_API_VERSION: process.env.AZURE_OPENAI_MODEL_API_VERSION || '2024-02-15-preview',
+    AZURE_OPENAI_API_KEY: cleanEnvVar(process.env.AZURE_OPENAI_API_KEY),
+    AZURE_OPENAI_ENDPOINT: cleanEnvVar(process.env.AZURE_OPENAI_ENDPOINT),
+    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'gpt-4'),
+    AZURE_OPENAI_MODEL_API_VERSION: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_API_VERSION, '2024-02-15-preview'),
 
     DOCUMENT_MCP_URL: process.env.DOCUMENT_MCP_URL || 'http://localhost:8001/sse',
-    RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/sse',
+    RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/mcp',
     DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || 'http://localhost:8003/sse',
 
-    MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'), // 10MB
-    UPLOAD_DIR: process.env.UPLOAD_DIR || '/app/data/uploads',
+    MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'),
+    UPLOAD_DIR: process.env.UPLOAD_DIR || './src/python/data/uploads',
 
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || 'RAG',
 };
+
 async function setupDirectories() {
     try {
         await mkdir(config.UPLOAD_DIR, { recursive: true });
-        console.log(`Upload directory ensured: ${config.UPLOAD_DIR}`);
     } catch (error) {
         console.error('Failed to create upload directory:', error);
         throw error;
     }
 }
-function validateConfig() {
-    const required = [
-        'AZURE_OPENAI_API_KEY',
-        'AZURE_OPENAI_ENDPOINT',
-    ];
 
-    const missing = required.filter(key => !process.env[key]);
+function validateConfig() {
+    const required = ['AZURE_OPENAI_API_KEY', 'AZURE_OPENAI_ENDPOINT'];
+    const missing = required.filter(key => !cleanEnvVar(process.env[key]));
     if (missing.length > 0) {
         throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
     }
 }
 
 function setupModel(): AzureChatOpenAI {
+    if (!config.AZURE_OPENAI_ENDPOINT.startsWith('https://')) {
+        throw new Error(`Invalid Azure OpenAI endpoint format: ${config.AZURE_OPENAI_ENDPOINT}. Must start with https://`);
+    }
+
+    try {
+        new URL(config.AZURE_OPENAI_ENDPOINT);
+    } catch (error) {
+        throw new Error(`Invalid Azure OpenAI endpoint URL: ${config.AZURE_OPENAI_ENDPOINT}`);
+    }
+
     return new AzureChatOpenAI({
         model: config.AZURE_OPENAI_MODEL_NAME,
         apiKey: config.AZURE_OPENAI_API_KEY,
-        openAIApiVersion: config.AZURE_OPENAI_MODEL_API_VERSION,
-        azureOpenAIApiInstanceName: config.AZURE_OPENAI_ENDPOINT.split('//')[1].split('.')[0],
+        azureOpenAIApiVersion: config.AZURE_OPENAI_MODEL_API_VERSION,
+        azureOpenAIEndpoint: config.AZURE_OPENAI_ENDPOINT,
         azureOpenAIApiDeploymentName: config.AZURE_OPENAI_MODEL_NAME,
         temperature: 0.1,
         maxTokens: 5000,
@@ -68,43 +81,44 @@ function setupModel(): AzureChatOpenAI {
 }
 
 async function setupMCPClient(): Promise<MultiServerMCPClient> {
-    const client = new MultiServerMCPClient({
+    return new MultiServerMCPClient({
         DocumentService: {
             url: config.DOCUMENT_MCP_URL,
             transport: 'sse',
         },
         RAGService: {
             url: config.RAG_MCP_URL,
-            transport: 'sse',
+            transport: 'http',
         },
-        // DocDBSummarizationService: {
-        //     url: config.DOCDB_SUMMARIZATION_MCP_URL,
-        //     transport: 'sse',
-        // }
-        //TODO translation service
-        //TODO history
     });
-
-    console.log('Connecting to MCP servers...');
-    // The client will connect when we call getTools()
-    return client;
 }
 
 async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClient) {
     try {
-        console.log('Getting tools from MCP servers...');
         const tools = await mcpClient.getTools();
-        console.log(`Loaded ${tools.length} tools from MCP servers`);
 
-        const agentPrompt = `You are an AI assistant with connection to these services:
-- DocumentService: for processing and uploading documents  
-- RAGService: for querying the vector database
-- DocDBSummarizationService: for summarizing documents, given a document_id
+        const agentPrompt = `You are an AI assistant that MUST search through user's uploaded documents before answering any question.
 
-If the user asks you to summarize a document and they provide a document id, use the DocDBSummarizationService.
-If the user asks you to answer a question, use the RAGService to query the vector database and answer questions related to user's personal documents.
-If the user wants to upload a document, guide them to use the upload endpoint.
-Always be helpful and provide accurate responses based on the available tools.`;
+CRITICAL INSTRUCTIONS:
+1. For ANY user question, ALWAYS use the RAG 'retrieve' tool FIRST to search the user's documents
+2. IMPORTANT: When calling the 'retrieve' tool, you MUST extract the user_id from the user input and pass it as a parameter
+3. The user_id will be provided in the context like "User ID: {user_id}"
+4. Only after searching documents should you provide an answer
+5. If the search returns relevant information, base your answer on that information
+6. If the search returns no relevant information, then you may use your general knowledge
+7. Always mention whether your answer comes from the user's documents or general knowledge
+
+Available tools:
+- retrieve: Search through uploaded documents (requires query and user_id parameters) - USE THIS FOR EVERY QUESTION
+- check_database: Check database status for a user (requires user_id parameter)
+- process_document: Upload and process new documents
+- upload_and_save_to_mongo: Save documents without vectorization
+
+Example tool usage:
+When user asks "what is mcp" and user_id is "nhan", call:
+retrieve(query="what is mcp", user_id="nhan")
+
+ALWAYS search documents first using the correct user_id, then answer based on what you find.`;
 
         return createReactAgent({
             llm: model,
@@ -118,29 +132,17 @@ Always be helpful and provide accurate responses based on the available tools.`;
 }
 
 const aiServicesPlugin = fp(async function aiServicesPlugin(fastify: FastifyInstance) {
-    console.log('Setting up Azure OpenAI model...');
     const model = setupModel();
-
-    console.log('Setting up MCP client...');
     const mcpClient = await setupMCPClient();
-
-    console.log('Setting up LangGraph agent...');
     const agent = await setupAgent(model, mcpClient);
 
     fastify.decorate('model', model);
     fastify.decorate('mcpClient', mcpClient);
     fastify.decorate('agent', agent);
-
-
-    fastify.addHook('onClose', async () => {
-        console.log('Closing AI services...');
-    });
 }, {
     name: 'ai-services',
     dependencies: []
 });
-
-
 
 async function registerPlugins(server: FastifyInstance): Promise<void> {
     try {
@@ -217,8 +219,6 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
     }
 }
 
-
-
 async function registerRoutes(server: FastifyInstance): Promise<void> {
     try {
         await server.register(api);
@@ -246,7 +246,7 @@ async function buildServer(): Promise<FastifyInstance> {
     await registerPlugins(server);
     await registerRoutes(server);
     await setupDirectories();
-    // Graceful shutdown
+
     const gracefulShutdown = async (signal: string) => {
         server.log.info(`Received ${signal}, shutting down gracefully...`);
         try {
@@ -282,7 +282,6 @@ async function startServer() {
             host: config.HOST,
             port: config.PORT,
         });
-
 
         if (config.NODE_ENV !== 'production') {
             console.log(`API Documentation: http://${config.HOST}:${config.PORT}/docs`);

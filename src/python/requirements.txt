@@ -53,3 +53,4 @@ nltk
 
 # Core Dependencies
 pydantic
+python-dotenv

@@ -1,0 +1,50 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Database
+pymongo
+motor
+qdrant-client
+
+# Text Processing & NLP
+langchain
+langchain-openai
+langchain-text-splitters
+
+# Document Processing
+pymupdf4llm
+python-docx
+pandas
+
+# Additional NLP (optional - for specific text splitters)
+spacy
+nltk
+
+# Core Dependencies
+pydantic
+python-dotenv
+
+# MCP Server
+mcp
+
+# Text Processing & Chunking
+semchunk
+tiktoken
+regex
+
+# Language Detection
+lingua-language-detector
+
+# JSON Processing
+json5
+
+# Environment & Configuration
+python-decouple
+
+# Async Support
+asyncio-extras
+
+# Additional utilities
+typing-extensions

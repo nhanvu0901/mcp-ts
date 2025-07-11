@@ -23,12 +23,6 @@ export class AskAgentController {
                 });
             }
 
-            request.log.info({
-                question: question.substring(0, 100),
-                userId,
-                session_id
-            }, 'Processing agent question');
-
             const agentResponse = await AskAgentController.processAgentQuestion(
                 request,
                 question,
@@ -45,7 +39,11 @@ export class AskAgentController {
             });
 
         } catch (error) {
-            request.log.error('Error processing agent question:', error);
+            request.log.error({
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined
+            }, 'Error processing agent question');
+
             return reply.status(500).send({
                 success: false,
                 error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -60,25 +58,43 @@ export class AskAgentController {
         sessionId: string
     ): Promise<string> {
         try {
-            const agent = await request.server.agent;
+            const agent = request.server.agent;
+            if (!agent) {
+                throw new Error('Agent not initialized on server instance');
+            }
 
-            const context = `User ID: ${userId}, Session: ${sessionId}`;
-            const fullPrompt = `${context}\n\nUser Question: ${question}`;
-
-            const agentResponse = await agent.invoke({
+            const agentInput = {
                 messages: [
                     {
-                        role: "user",
-                        content: fullPrompt
+                        role: "user" as const,
+                        content: `User ID: ${userId},Qdrant , Session: ${sessionId}\n\nQuestion: ${question}`
                     }
                 ]
-            });
+            };
 
-            return agentResponse.messages[agentResponse.messages.length - 1].content;
+            const agentResponse = await agent.invoke(agentInput);
+
+            if (!agentResponse?.messages?.length) {
+                throw new Error('Agent returned invalid response');
+            }
+
+            const lastMessage = agentResponse.messages[agentResponse.messages.length - 1];
+
+            if (!lastMessage?.content) {
+                throw new Error('Agent response missing content');
+            }
+
+            return typeof lastMessage.content === 'string'
+                ? lastMessage.content
+                : JSON.stringify(lastMessage.content);
 
         } catch (error) {
-            request.log.error('Agent processing failed:', error);
-            throw new Error(`Agent processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            request.log.error({
+                error: error instanceof Error ? error.message : String(error),
+                userId,
+                sessionId
+            }, 'Agent processing failed');
+            throw new Error(`Agent processing failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 }
