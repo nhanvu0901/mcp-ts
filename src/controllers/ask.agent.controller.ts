@@ -7,12 +7,12 @@ export class AskAgentController {
         reply: FastifyReply
     ): Promise<AskAgentResponse> {
         try {
-            const { question, user_id: userId, session_id = 'default' } = request.body;
+            const { query, user_id: userId, collection_id: collectionId } = request.body;
 
-            if (!question?.trim()) {
+            if (!query?.trim()) {
                 return reply.status(400).send({
                     success: false,
-                    error: 'Question is required and cannot be empty'
+                    error: 'Query is required and cannot be empty'
                 });
             }
 
@@ -23,18 +23,25 @@ export class AskAgentController {
                 });
             }
 
+            if (!collectionId) {
+                return reply.status(400).send({
+                    success: false,
+                    error: 'collection_id is required'
+                });
+            }
+
             const agentResponse = await AskAgentController.processAgentQuestion(
                 request,
-                question,
+                query,
                 userId,
-                session_id
+                collectionId
             );
 
             return reply.send({
                 success: true,
                 response: agentResponse,
                 user_id: userId,
-                session_id,
+                collection_id: collectionId,
                 timestamp: new Date().toISOString()
             });
 
@@ -53,9 +60,9 @@ export class AskAgentController {
 
     private static async processAgentQuestion(
         request: FastifyRequest,
-        question: string,
+        query: string,
         userId: string,
-        sessionId: string
+        collectionId: string
     ): Promise<string> {
         try {
             const agent = request.server.agent;
@@ -67,7 +74,7 @@ export class AskAgentController {
                 messages: [
                     {
                         role: "user" as const,
-                        content: `User ID: ${userId},Qdrant , Session: ${sessionId}\n\nQuestion: ${question}`
+                        content: `User ID: ${userId}, Collection ID: ${collectionId}\n\nQuery: ${query}`
                     }
                 ]
             };
@@ -92,7 +99,7 @@ export class AskAgentController {
             request.log.error({
                 error: error instanceof Error ? error.message : String(error),
                 userId,
-                sessionId
+                collectionId
             }, 'Agent processing failed');
             throw new Error(`Agent processing failed: ${error instanceof Error ? error.message : String(error)}`);
         }

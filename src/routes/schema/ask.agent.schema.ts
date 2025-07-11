@@ -1,7 +1,7 @@
 export const AskAgentSchema = {
     tags: ["Ask Agent"],
-    summary: "Ask the AI agent a question",
-    description: "Submit a question to the AI agent which will use available MCP tools to provide an answer",
+    summary: "Ask the AI agent a question about documents in a specific collection",
+    description: "Submit a query to the AI agent which will search through documents in the specified collection",
     security: [
         {
             bearerAuth: []
@@ -9,11 +9,11 @@ export const AskAgentSchema = {
     ],
     body: {
         type: "object",
-        required: ["question", "user_id"],
+        required: ["query", "user_id", "collection_id"],
         properties: {
-            question: {
+            query: {
                 type: "string",
-                description: "The question to ask the agent",
+                description: "The query to search for in documents",
                 minLength: 1,
                 maxLength: 2000
             },
@@ -21,10 +21,9 @@ export const AskAgentSchema = {
                 type: "string",
                 description: "User identifier"
             },
-            session_id: {
+            collection_id: {
                 type: "string",
-                description: "Session identifier",
-                default: "default"
+                description: "Collection identifier to search within"
             }
         }
     },
@@ -36,12 +35,12 @@ export const AskAgentSchema = {
                 success: { type: "boolean" },
                 response: { type: "string" },
                 user_id: { type: "string" },
-                session_id: { type: "string" },
+                collection_id: { type: "string" },
                 timestamp: { type: "string" }
             }
         },
         400: {
-            description: "Bad request - invalid question or missing parameters",
+            description: "Bad request - invalid query or missing parameters",
             type: "object",
             properties: {
                 error: { type: "string" },

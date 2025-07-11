@@ -58,32 +58,42 @@ async function testConnections() {
 
 mcp.addTool({
     name: 'retrieve',
-    description: 'Query the Qdrant vector database with a text query and return matching results from user documents',
+    description: 'Query the Qdrant vector database with a text query and return matching results from user documents in a specific collection',
     parameters: z.object({
         query: z.string().describe('The text query to search for'),
         user_id: z.string().describe('User ID to search documents for'),
+        collection_id: z.string().describe('Collection ID to search within'),
         limit: z.number().default(5).describe('Maximum number of results to return')
     }),
     execute: async (args: any) => {
         try {
-            const { query, user_id, limit = 5 } = args;
-            const userCollectionName = `user_${user_id}_docs`;
+            const { query, user_id, collection_id, limit = 5 } = args;
 
             const collections = await qdrantClient.getCollections();
-            const collectionExists = collections.collections.some(c => c.name === userCollectionName);
+            const collectionExists = collections.collections.some(c => c.name === collection_id);
 
             if (!collectionExists) {
-                return `No documents found for user "${user_id}". Collection "${userCollectionName}" does not exist yet. Please upload some documents first.`;
+                return `No collection "${collection_id}" found. Please ensure the collection exists and upload some documents first.`;
             }
 
-            const collectionInfo = await qdrantClient.getCollection(userCollectionName);
+            const collectionInfo = await qdrantClient.getCollection(collection_id);
             const queryEmbedding = await embeddingModel.embedQuery(query);
 
-            const searchResults = await qdrantClient.search(userCollectionName, {
+            const searchResults = await qdrantClient.search(collection_id, {
                 vector: queryEmbedding,
                 limit: limit,
                 with_payload: true,
                 score_threshold: 0.3,
+                filter: {
+                    must: [
+                        {
+                            key: "user_id",
+                            match: {
+                                value: user_id
+                            }
+                        }
+                    ]
+                }
             });
 
             const results: string[] = [];
@@ -98,10 +108,10 @@ mcp.addTool({
             }
 
             if (results.length === 0) {
-                return `No relevant documents found for "${query}" in user ${user_id}'s documents. The database contains ${collectionInfo.points_count} documents, but none match your query. Try different keywords or upload documents about this topic.`;
+                return `No relevant documents found for "${query}" in collection "${collection_id}" for user "${user_id}". The collection contains ${collectionInfo.points_count} total documents, but none match your query or belong to your user account. Try different keywords or upload documents about this topic.`;
             }
 
-            return `Found ${results.length} relevant documents from user ${user_id}'s collection:\n\n${results.join('\n\n---\n\n')}`;
+            return `Found ${results.length} relevant documents from collection "${collection_id}" for user "${user_id}":\n\n${results.join('\n\n---\n\n')}`;
 
         } catch (error) {
             if (error instanceof Error) {
@@ -117,32 +127,6 @@ mcp.addTool({
     }
 });
 
-mcp.addTool({
-    name: 'check_database',
-    description: 'Check the status of the vector database for a specific user and see how many documents are stored',
-    parameters: z.object({
-        user_id: z.string().describe('User ID to check documents for')
-    }),
-    execute: async (args: any) => {
-        try {
-            const { user_id } = args;
-            const userCollectionName = `user_${user_id}_docs`;
-
-            const collections = await qdrantClient.getCollections();
-            const collectionExists = collections.collections.some(c => c.name === userCollectionName);
-
-            if (!collectionExists) {
-                return `Database status for user "${user_id}": Collection "${userCollectionName}" does not exist. No documents have been uploaded yet.`;
-            }
-
-            const collectionInfo = await qdrantClient.getCollection(userCollectionName);
-            return `Database status for user "${user_id}": Collection "${userCollectionName}" exists with ${collectionInfo.points_count} documents stored.`;
-
-        } catch (error) {
-            return `Error checking database: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        }
-    }
-});
 
 if (require.main === module) {
     testConnections().then(() => {
