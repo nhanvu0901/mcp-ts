@@ -48,3 +48,5 @@ asyncio-extras
 
 # Additional utilities
 typing-extensions
+
+litellm

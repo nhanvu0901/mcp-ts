@@ -31,9 +31,10 @@ const config = {
     AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'gpt-4'),
     AZURE_OPENAI_MODEL_API_VERSION: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_API_VERSION, '2024-02-15-preview'),
 
-    DOCUMENT_MCP_URL: process.env.DOCUMENT_MCP_URL || 'http://localhost:8001/sse',
+    // DOCUMENT_MCP_URL: process.env.DOCUMENT_MCP_URL || 'http://localhost:8001/sse',
     RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/mcp',
     DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || 'http://localhost:8003/sse',
+    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || 'http://localhost:8004/sse',
 
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'),
     UPLOAD_DIR: process.env.UPLOAD_DIR || './src/python/data/uploads',
@@ -81,7 +82,7 @@ function setupModel(): AzureChatOpenAI {
 }
 
 async function setupMCPClient(): Promise<MultiServerMCPClient> {
-    return new MultiServerMCPClient({
+    const client = new MultiServerMCPClient({
         // DocumentService: {
         //     url: config.DOCUMENT_MCP_URL,
         //     transport: 'sse',
@@ -90,32 +91,34 @@ async function setupMCPClient(): Promise<MultiServerMCPClient> {
             url: config.RAG_MCP_URL,
             transport: 'http',
         },
+        DocDBSummarizationService: {
+            url: config.DOCDB_SUMMARIZATION_MCP_URL,
+            transport: 'sse',
+        },
+        DocumentTranslationService: {
+            url: config.DOCUMENT_TRANSLATION_MCP_URL,
+            transport: 'sse',
+        },
+        //TODO history
     });
+    console.log('Connecting to MCP servers...');
+    return client;
 }
 
 async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClient) {
     try {
         const tools = await mcpClient.getTools();
  console.log(`Loaded ${tools.length} tools from MCP servers`);
-        const agentPrompt = `You are an AI assistant that MUST search through user's uploaded documents before answering any question.
-
-CRITICAL INSTRUCTIONS:
-1. For ANY user question, ALWAYS use the RAG 'retrieve' tool FIRST to search the user's documents
-2. IMPORTANT: When calling the 'retrieve' tool, you MUST extract both the user_id and collection_id from the user input and pass them as parameters
-3. The user_id and collection_id will be provided in the context like "User ID: {user_id}, Collection ID: {collection_id}"
-4. Only after searching documents should you provide an answer
-5. If the search returns relevant information, base your answer on that information
-6. If the search returns no relevant information, then you may use your general knowledge
-7. Always mention whether your answer comes from the user's documents or general knowledge
-
-Available tools:
-- retrieve: Search through uploaded documents (requires query, user_id, and collection_id parameters) - USE THIS FOR EVERY QUESTION
-
-Example tool usage:
-When user asks "what is mcp" with user_id "nhan" and collection_id "proj1", call:
-retrieve(query="what is mcp", user_id="nhan", collection_id="proj1")
-
-ALWAYS search documents first using the correct user_id and collection_id, then answer based on what you find.`;
+        const agentPrompt = `You are an AI assistant with connection to these services:
+ - RAGService: for querying the vector database
+ - DocDBSummarizationService: for summarizing documents, given a document_id
+ - DocumentTranslationService: for translating documents, given a document_id
+ 
+ If the user asks you to summarize a document and you are provided with a document id, use the DocDBSummarizationService.
+ If the user asks you to answer a question, use the RAGService to query the vector database and answer questions related to user's personal documents.
+ If the user asks you to translate a document, use the DocumentTranslationService.
+ Always be helpful and provide accurate responses based on the available tools.`;
+ 
 
         return createReactAgent({
             llm: model,

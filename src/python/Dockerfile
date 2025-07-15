@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     gosu \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -19,21 +20,24 @@ RUN mkdir -p /app/data/uploads && \
 RUN useradd --create-home --shell /bin/bash mcp && \
     chown -R mcp:mcp /app
 
-# Create an entrypoint script to fix permissions
+# Create supervisor configuration
+RUN mkdir -p /etc/supervisor/conf.d
+COPY supervisord.conf /etc/supervisor/conf.d/
+
+# Create startup script
 RUN echo '#!/bin/bash\n\
 # Fix permissions for the mounted volume\n\
 chown -R mcp:mcp /app/data/uploads\n\
-# Execute the command as the mcp user\n\
-exec gosu mcp "$@"' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
+# Start supervisor as mcp user\n\
+exec gosu mcp supervisord -c /etc/supervisor/conf.d/supervisord.conf' > /start-services.sh && \
+    chmod +x /start-services.sh
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
-ENV MCP_PORT=8001
 
 VOLUME ["/app/data/uploads"]
 
-EXPOSE 8001
+# Expose all service ports
+EXPOSE 8000 8002 8003 8004
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python", "mcp_servers/mcp_server_document.py"]
+ENTRYPOINT ["/start-services.sh"]

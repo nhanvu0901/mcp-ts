@@ -48,9 +48,7 @@ async def create_collection(collection: CollectionCreate):
     try:
         print(f"Creating collection: {collection.name} for user: {collection.user_id}")
         print(f"Generated collection_id: {collection_id}")
-        print(f"Qdrant collection name: {collection_id}")
 
-        # Create Qdrant collection using collection_id as name
         try:
             qdrant_client = QdrantClient(host="localhost", port=6333)
 
@@ -70,16 +68,11 @@ async def create_collection(collection: CollectionCreate):
             print(f"Qdrant error: {qdrant_error}")
             raise HTTPException(status_code=500, detail=f"Failed to create Qdrant collection: {str(qdrant_error)}")
 
-        # Save to MongoDB
-        success = mongo_service.save_document(
-            document_id=f"collection_{collection_id}",
-            text="",
+        success = mongo_service.save_collection(
+            collection_id=collection_id,
+            name=collection.name,
             user_id=collection.user_id,
-            metadata={
-                "type": "collection",
-                "name": collection.name,
-                "collection_id": collection_id
-            }
+            metadata={"created_at": uuid.uuid4().hex}
         )
 
         print(f"MongoDB save result: {success}")
@@ -91,7 +84,6 @@ async def create_collection(collection: CollectionCreate):
                 "status": "created"
             }
         else:
-            # Rollback: delete Qdrant collection if MongoDB fails
             try:
                 qdrant_client.delete_collection(collection_id)
                 print(f"Rollback: Deleted Qdrant collection {collection_id}")
@@ -111,22 +103,16 @@ async def create_collection(collection: CollectionCreate):
 @app.delete("/collections/{collection_id}")
 async def delete_collection(collection_id: str, user_id: str):
     try:
-        db = mongo_client[mongo_service.db_name]
-        collection = db[mongo_service.collection_name]
-
-        collection_doc = collection.find_one({"_id": f"collection_{collection_id}"})
+        collection_doc = mongo_service.get_collection(collection_id, user_id)
 
         if not collection_doc:
             raise HTTPException(status_code=404, detail="Collection not found")
 
-        if collection_doc.get("user_id") != user_id:
-            raise HTTPException(status_code=403, detail="Not authorized to delete this collection")
+        success = mongo_service.delete_collection(collection_id, user_id)
 
-        # Delete from MongoDB
-        collection.delete_one({"_id": f"collection_{collection_id}"})
-        collection.delete_many({"collection_id": collection_id})
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete collection from MongoDB")
 
-        # Delete Qdrant collection using collection_id as name
         try:
             qdrant_client = QdrantClient(host="localhost", port=6333)
             if qdrant_client.collection_exists(collection_id):
@@ -146,18 +132,12 @@ async def delete_collection(collection_id: str, user_id: str):
 @app.get("/collections")
 async def list_collections(user_id: str):
     try:
-        db = mongo_client[mongo_service.db_name]
-        collection = db[mongo_service.collection_name]
-
-        collections = list(collection.find({
-            "type": "collection",
-            "user_id": user_id
-        }))
+        collections = mongo_service.list_user_collections(user_id)
 
         result = []
         for col in collections:
             result.append({
-                "collection_id": col.get("collection_id"),
+                "collection_id": col.get("_id"),
                 "name": col.get("name"),
                 "user_id": col.get("user_id")
             })
@@ -189,14 +169,11 @@ async def upload_document(
         qdrant_collection_name = "default"
 
         if collection_id:
-            db = mongo_client[mongo_service.db_name]
-            collection = db[mongo_service.collection_name]
-            collection_doc = collection.find_one({"_id": f"collection_{collection_id}"})
+            collection_doc = mongo_service.get_collection(collection_id, user_id)
 
             print(f"Collection doc found: {collection_doc}")
 
-            if collection_doc and collection_doc.get("user_id") == user_id:
-                # Use collection_id directly as Qdrant collection name
+            if collection_doc:
                 qdrant_collection_name = collection_id
                 print(f"Using Qdrant collection: {qdrant_collection_name}")
             else:
@@ -259,7 +236,7 @@ async def upload_document(
 async def get_document_info(document_id: str):
     try:
         db = mongo_client[mongo_service.db_name]
-        collection = db[mongo_service.collection_name]
+        collection = db[mongo_service.DOCUMENTS_COLLECTION]
 
         doc = collection.find_one({"_id": document_id})
 
@@ -288,20 +265,7 @@ async def list_documents(user_id: str, collection_id: Optional[str] = None):
         print(f"User ID: {user_id}")
         print(f"Collection ID: {collection_id}")
 
-        db = mongo_client[mongo_service.db_name]
-        collection = db[mongo_service.collection_name]
-
-        query = {
-            "user_id": user_id,
-            "type": {"$ne": "collection"}
-        }
-
-        if collection_id:
-            query["collection_id"] = collection_id
-
-        print(f"MongoDB query: {query}")
-
-        docs = list(collection.find(query))
+        docs = mongo_service.list_user_documents(user_id, collection_id)
 
         print(f"Found {len(docs)} documents")
         for doc in docs:
@@ -335,12 +299,9 @@ async def search_documents(search: DocumentSearch):
         qdrant_collection_name = "default"
 
         if search.collection_id:
-            db = mongo_client[mongo_service.db_name]
-            collection = db[mongo_service.collection_name]
-            collection_doc = collection.find_one({"_id": f"collection_{search.collection_id}"})
+            collection_doc = mongo_service.get_collection(search.collection_id, search.user_id)
 
-            if collection_doc and collection_doc.get("user_id") == search.user_id:
-                # Use collection_id directly as Qdrant collection name
+            if collection_doc:
                 qdrant_collection_name = search.collection_id
             else:
                 raise HTTPException(status_code=403, detail="Collection not found or not authorized")
@@ -377,7 +338,7 @@ async def search_documents(search: DocumentSearch):
 async def delete_document(document_id: str, user_id: str):
     try:
         db = mongo_client[mongo_service.db_name]
-        collection = db[mongo_service.collection_name]
+        collection = db[mongo_service.DOCUMENTS_COLLECTION]
 
         doc = collection.find_one({"_id": document_id})
 
@@ -391,7 +352,6 @@ async def delete_document(document_id: str, user_id: str):
         collection_id = doc.get("collection_id")
 
         if collection_id:
-            # Use collection_id directly as Qdrant collection name
             qdrant_collection_name = collection_id
 
         processor = DocumentProcessor(
@@ -417,7 +377,7 @@ async def delete_document(document_id: str, user_id: str):
 async def get_document_status(document_id: str):
     try:
         db = mongo_client[mongo_service.db_name]
-        collection = db[mongo_service.collection_name]
+        collection = db[mongo_service.DOCUMENTS_COLLECTION]
 
         doc = collection.find_one({"_id": document_id})
 
@@ -431,7 +391,6 @@ async def get_document_status(document_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.get("/health")
 async def health_check():
     try:
@@ -439,14 +398,14 @@ async def health_check():
         mongo_status = "connected"
     except Exception as e:
         mongo_status = f"error: {str(e)}"
-
+    
     try:
         qdrant_client = QdrantClient(host="localhost", port=6333)
         qdrant_client.get_collections()
         qdrant_status = "connected"
     except Exception as e:
         qdrant_status = f"error: {str(e)}"
-
+    
     return {
         "status": "healthy",
         "mongodb": mongo_status,
@@ -455,8 +414,6 @@ async def health_check():
         "qdrant": qdrant_status
     }
 
-
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
