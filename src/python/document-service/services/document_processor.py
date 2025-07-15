@@ -5,13 +5,14 @@ from .qdrant_service import QdrantService
 from .text_splitter import TextSplitter
 from .config import ChunkingMethod, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
 from .utils import extract_text
+from .config import DEFAULT_QDRANT_HOST
 
 class DocumentProcessor:
     def __init__(self,
                  collection_name: str,
                  embedding_model: AzureOpenAIEmbeddings,
                  mongo_client: MongoClient = None,
-                 qdrant_host: str = "localhost",
+                 qdrant_host: str = DEFAULT_QDRANT_HOST,
                  qdrant_port: int = 6333,
                  vector_size: int = 3072):
         

@@ -32,7 +32,7 @@ const config = {
     AZURE_OPENAI_MODEL_API_VERSION: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_API_VERSION, '2024-02-15-preview'),
 
     // DOCUMENT_MCP_URL: process.env.DOCUMENT_MCP_URL || 'http://localhost:8001/sse',
-    RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/mcp',
+    RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/sse',
     DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || 'http://localhost:8003/sse',
     DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || 'http://localhost:8004/sse',
 
@@ -89,7 +89,7 @@ async function setupMCPClient(): Promise<MultiServerMCPClient> {
         // },
         RAGService: {
             url: config.RAG_MCP_URL,
-            transport: 'http',
+            transport: 'sse',
         },
         DocDBSummarizationService: {
             url: config.DOCDB_SUMMARIZATION_MCP_URL,

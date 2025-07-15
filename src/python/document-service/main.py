@@ -21,6 +21,7 @@ app = FastAPI(title="Document Service API")
 
 mongo_client = MongoClient(MONGODB_URI)
 mongo_service = MongoService(mongo_client)
+qdrant_host = os.getenv("QDRANT_HOST")
 
 embedding_model = AzureOpenAIEmbeddings(
     azure_endpoint=os.getenv("AZURE_OPENAI_EMBEDDING_ENDPOINT"),
@@ -50,7 +51,7 @@ async def create_collection(collection: CollectionCreate):
         print(f"Generated collection_id: {collection_id}")
 
         try:
-            qdrant_client = QdrantClient(host="localhost", port=6333)
+            qdrant_client = QdrantClient(host=qdrant_host, port=6333)
 
             if not qdrant_client.collection_exists(collection_id):
                 qdrant_client.create_collection(
@@ -114,7 +115,7 @@ async def delete_collection(collection_id: str, user_id: str):
             raise HTTPException(status_code=500, detail="Failed to delete collection from MongoDB")
 
         try:
-            qdrant_client = QdrantClient(host="localhost", port=6333)
+            qdrant_client = QdrantClient(host=qdrant_host, port=6333)
             if qdrant_client.collection_exists(collection_id):
                 qdrant_client.delete_collection(collection_id)
                 print(f"Deleted Qdrant collection: {collection_id}")
@@ -400,7 +401,7 @@ async def health_check():
         mongo_status = f"error: {str(e)}"
     
     try:
-        qdrant_client = QdrantClient(host="localhost", port=6333)
+        qdrant_client = QdrantClient(host=qdrant_host, port=6333)
         qdrant_client.get_collections()
         qdrant_status = "connected"
     except Exception as e:
@@ -410,7 +411,6 @@ async def health_check():
         "status": "healthy",
         "mongodb": mongo_status,
         "mongodb_db": mongo_service.db_name,
-        "mongodb_collection": mongo_service.collection_name,
         "qdrant": qdrant_status
     }
 
