@@ -11,5 +11,5 @@ db.createUser({
 
 db.createCollection('collections');
 db.createCollection('documents');
-
+db.createCollection('chat_memory')
 print('Database and user created successfully');

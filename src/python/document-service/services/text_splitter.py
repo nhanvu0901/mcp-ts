@@ -54,6 +54,7 @@ class TextSplitter:
             ChunkingMethod.LATEX: lambda: LatexTextSplitter(
                 chunk_size=chunk_size, chunk_overlap=overlap, **kwargs
             ),
+            #TODO add sematic chunk/ agent chunk
         }
         
         return splitters.get(method, splitters[ChunkingMethod.RECURSIVE_CHARACTER])()

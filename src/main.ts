@@ -1,14 +1,15 @@
 import 'reflect-metadata';
-import fastify, { type FastifyInstance } from 'fastify';
+import fastify, {type FastifyInstance} from 'fastify';
 import multipart from '@fastify/multipart';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
-import { AzureChatOpenAI } from '@langchain/openai';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
-import { MultiServerMCPClient } from '@langchain/mcp-adapters';
-import { mkdir } from 'fs/promises';
+import {AzureChatOpenAI} from '@langchain/openai';
+import {createReactAgent} from '@langchain/langgraph/prebuilt';
+import {MultiServerMCPClient} from '@langchain/mcp-adapters';
+import {MongoClient} from 'mongodb';
+import {mkdir} from 'fs/promises';
 import api from "./routes/index";
 import dotenv from 'dotenv';
 import fp from 'fastify-plugin';
@@ -31,20 +32,20 @@ const config = {
     AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'gpt-4'),
     AZURE_OPENAI_MODEL_API_VERSION: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_API_VERSION, '2024-02-15-preview'),
 
-    // DOCUMENT_MCP_URL: process.env.DOCUMENT_MCP_URL || 'http://localhost:8001/sse',
     RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/sse',
     DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || 'http://localhost:8003/sse',
     DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || 'http://localhost:8004/sse',
 
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'),
     UPLOAD_DIR: process.env.UPLOAD_DIR || './src/python/data/uploads',
-
+    // MONGODB_URI: process.env.MONGODB_URI || 'mongodb://admin:admin123@mongodb:27017/ai_assistant?authSource=admin',
+    MONGODB_URI: 'mongodb://admin:admin123@localhost:27017/ai_assistant?authSource=admin',
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || 'RAG',
 };
 
 async function setupDirectories() {
     try {
-        await mkdir(config.UPLOAD_DIR, { recursive: true });
+        await mkdir(config.UPLOAD_DIR, {recursive: true});
     } catch (error) {
         console.error('Failed to create upload directory:', error);
         throw error;
@@ -81,12 +82,25 @@ function setupModel(): AzureChatOpenAI {
     });
 }
 
+async function setupMongoClient(): Promise<MongoClient> {
+    const client = new MongoClient(config.MONGODB_URI, {
+        driverInfo: {name: "langchainjs"},
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
+    });
+
+    try {
+        await client.connect();
+        await client.db("admin").command({ping: 1});
+        return client;
+    } catch (error) {
+        console.error('MongoDB connection failed:', error);
+        throw error;
+    }
+}
+
 async function setupMCPClient(): Promise<MultiServerMCPClient> {
     const client = new MultiServerMCPClient({
-        // DocumentService: {
-        //     url: config.DOCUMENT_MCP_URL,
-        //     transport: 'sse',
-        // },
         RAGService: {
             url: config.RAG_MCP_URL,
             transport: 'sse',
@@ -99,7 +113,6 @@ async function setupMCPClient(): Promise<MultiServerMCPClient> {
             url: config.DOCUMENT_TRANSLATION_MCP_URL,
             transport: 'sse',
         },
-        //TODO history
     });
     console.log('Connecting to MCP servers...');
     return client;
@@ -108,18 +121,22 @@ async function setupMCPClient(): Promise<MultiServerMCPClient> {
 async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClient) {
     try {
         const tools = await mcpClient.getTools();
- console.log(`Loaded ${tools.length} tools from MCP servers`);
-        const agentPrompt = `You are an AI assistant with connection to these services:
- - RAGService: for querying the vector database
- - DocDBSummarizationService: for summarizing documents, given a document_id
- - DocumentTranslationService: for translating documents, given a document_id
- 
- If the user asks you to summarize a document and you are provided with a document id, use the DocDBSummarizationService.
- If the user asks you to answer a question, use the RAGService to query the vector database and answer questions related to user's personal documents.
- If the user asks you to translate a document, use the DocumentTranslationService.
- Always be helpful and provide accurate responses based on the available tools.`;
- 
+        console.log(`Loaded ${tools.length} tools from MCP servers`);
 
+        const agentPrompt = `You are an AI assistant with access to the following services:
+- RAGService: Use this service to query the vector database and answer questions based on the user's personal documents.
+- DocDBSummarizationService: Use this service to summarize a document when the user provides a specific document_id.
+- DocumentTranslationService: Use this service to translate a document when the user provides a specific document_id.
+
+**Important: You have access to conversation history context that appears as "Previous conversation summary" in the messages. Always check this context FIRST before using external services.**
+
+Workflow:
+1. **Check conversation history**: If the question can be answered from the conversation history context, answer directly from that context.
+2. **Document-specific requests**: If the user asks to summarize or translate a document with a specific document_id, use the appropriate service.
+3. **Document search**: For other questions, use the RAGService to search the user's documents.
+4. **Fallback**: If neither the conversation history nor documents contain the answer, politely inform the user.
+
+**Always prioritize conversation history context over external services for personal information about the user.**`;
         return createReactAgent({
             llm: model,
             tools: tools,
@@ -133,10 +150,12 @@ async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClien
 
 const aiServicesPlugin = fp(async function aiServicesPlugin(fastify: FastifyInstance) {
     const model = setupModel();
+    const mongoClient = await setupMongoClient();
     const mcpClient = await setupMCPClient();
     const agent = await setupAgent(model, mcpClient);
 
     fastify.decorate('model', model);
+    fastify.decorate('mongoClient', mongoClient);
     fastify.decorate('mcpClient', mcpClient);
     fastify.decorate('agent', agent);
 }, {
@@ -146,7 +165,7 @@ const aiServicesPlugin = fp(async function aiServicesPlugin(fastify: FastifyInst
 
 async function registerPlugins(server: FastifyInstance): Promise<void> {
     try {
-        await server.register(import('@fastify/compress'), { global: false });
+        await server.register(import('@fastify/compress'), {global: false});
 
         await server.register(cors, {
             origin: config.NODE_ENV === 'production'
@@ -296,6 +315,7 @@ async function startServer() {
 declare module 'fastify' {
     interface FastifyInstance {
         model: AzureChatOpenAI;
+        mongoClient: MongoClient;
         mcpClient: MultiServerMCPClient;
         agent: any;
     }
