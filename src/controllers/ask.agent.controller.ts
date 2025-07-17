@@ -21,12 +21,17 @@ export class AskAgentController {
                 collectionId
             );
 
+            const sourceReferences = AgentUtils.extractSourceReferences(agentResponse);
+
+
             return reply.send({
                 success: true,
                 response: agentResponse,
                 user_id: userId,
                 collection_id: collectionId,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                source_references: sourceReferences,
+                sources_count: sourceReferences.length
             });
 
         } catch (error) {
@@ -58,11 +63,12 @@ export class AskAgentController {
                 throw new Error('Required services not initialized on server instance');
             }
 
+            const sessionId = `${userId}_${collectionId}`;
             const chatHistoryService = new ChatHistoryService(mongoClient, model);
             const chatHistory = await chatHistoryService.getChatHistory(userId, collectionId);
 
             const allMessages = await chatHistory.getMessages();
-            const contextMessages = await chatHistoryService.buildContextMessages(allMessages);
+            const contextMessages = await chatHistoryService.buildContextMessages(allMessages, sessionId);
 
             const messages = [
                 ...contextMessages,
@@ -72,7 +78,7 @@ export class AskAgentController {
             const agentResponse = await agent.invoke({ messages });
             const responseContent = AgentUtils.extractResponseContent(agentResponse);
 
-            await chatHistoryService.saveConversation(chatHistory, query, responseContent);
+            await chatHistoryService.saveConversation(chatHistory, query, responseContent, sessionId);
 
             return responseContent;
 

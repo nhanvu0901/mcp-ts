@@ -1,13 +1,15 @@
-import { MongoDBChatMessageHistory } from '@langchain/mongodb';
-import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
-import { MongoClient } from 'mongodb';
-import { AzureChatOpenAI } from '@langchain/openai';
-import { IChatHistoryService, ChatHistoryConfig } from '../types/chat-history.types';
+import {MongoDBChatMessageHistory} from '@langchain/mongodb';
+import {HumanMessage, AIMessage, SystemMessage} from '@langchain/core/messages';
+import {MongoClient} from 'mongodb';
+import {AzureChatOpenAI} from '@langchain/openai';
+import {IChatHistoryService, ChatHistoryConfig} from '../types/chat-history.types';
+import {StoredSummary} from 'types/chat-history.types'
+
 
 export class ChatHistoryService implements IChatHistoryService {
     private readonly shortTermLimit: number;
-    private readonly summaryChunkSize: number;
     private readonly summaryWordLimit: number;
+    private summariesCollection: any;
 
     constructor(
         private mongoClient: MongoClient,
@@ -15,8 +17,8 @@ export class ChatHistoryService implements IChatHistoryService {
         config?: ChatHistoryConfig
     ) {
         this.shortTermLimit = config?.shortTermLimit ?? 10;
-        this.summaryChunkSize = config?.summaryChunkSize ?? 5;
         this.summaryWordLimit = config?.summaryWordLimit ?? 50;
+        this.summariesCollection = this.mongoClient.db("ai_assistant").collection("chat_summaries");
     }
 
     async getChatHistory(userId: string, collectionId: string): Promise<MongoDBChatMessageHistory> {
@@ -27,19 +29,19 @@ export class ChatHistoryService implements IChatHistoryService {
         });
     }
 
-    async buildContextMessages(allMessages: any[]): Promise<any[]> {
+    async buildContextMessages(allMessages: any[], sessionId: string): Promise<any[]> {
         if (allMessages.length <= this.shortTermLimit) {
             return allMessages;
         }
 
         const recentMessages = allMessages.slice(-this.shortTermLimit);
-        const olderMessages = allMessages.slice(this.shortTermLimit, -this.shortTermLimit);
+        const olderMessagesCount = allMessages.length - this.shortTermLimit;
 
-        if (olderMessages.length === 0) {
+        if (olderMessagesCount === 0) {
             return recentMessages;
         }
 
-        const summaries = await this.createConversationSummaries(olderMessages);
+        const summaries = await this.getStoredSummaries(allMessages, sessionId);
         const contextMessages = [];
 
         if (summaries.length > 0) {
@@ -47,50 +49,84 @@ export class ChatHistoryService implements IChatHistoryService {
             contextMessages.push(new SystemMessage(
                 `Previous conversation summary:\n${combinedSummary}\n\n--- Current conversation continues below ---`
             ));
+        } else if (olderMessagesCount < this.shortTermLimit) {
+            //For messages < shortTermLimit include the few older messages directly to avoid loss
+            const unsummarizedMessages = allMessages.slice(0, olderMessagesCount);
+            contextMessages.push(...unsummarizedMessages);
         }
 
         contextMessages.push(...recentMessages);
         return contextMessages;
     }
 
-    async saveConversation(chatHistory: MongoDBChatMessageHistory, userQuery: string, agentResponse: string): Promise<void> {
+    async saveConversation(chatHistory: MongoDBChatMessageHistory, userQuery: string, agentResponse: string, sessionId: string): Promise<void> {
         await chatHistory.addMessage(new HumanMessage(userQuery));
         await chatHistory.addMessage(new AIMessage(agentResponse));
+
+        const allMessages = await chatHistory.getMessages();
+        await this.checkAndCreateSummary(allMessages, sessionId);
     }
 
-    private async createConversationSummaries(messages: any[]): Promise<string[]> {
-        const summaries: string[] = [];
+    private async getStoredSummaries(allMessages: any[], sessionId: string): Promise<string[]> {
+        const olderMessagesCount = allMessages.length - this.shortTermLimit;
+        const summaryCount = Math.floor(olderMessagesCount / this.shortTermLimit);
 
-        for (let i = 0; i < messages.length; i += this.summaryChunkSize) {
-            const chunk = messages.slice(i, i + this.summaryChunkSize);
-
-            if (chunk.length < 2) continue;
-
-            try {
-                const summary = await this.summarizeMessageChunk(chunk);
-                summaries.push(summary);
-            } catch (error) {
-                console.error('Error creating summary:', error);
-                continue;
-            }
+        if (summaryCount === 0) {
+            return [];
         }
 
-        return summaries;
+        const summaries = await this.summariesCollection
+            .find({
+                sessionId,
+                summaryIndex: {$lt: summaryCount}
+            })
+            .sort({summaryIndex: 1})
+            .toArray();
+
+        return summaries.map((s: StoredSummary) => s.summary);
     }
 
-    private async summarizeMessageChunk(messageChunk: any[]): Promise<string> {
-        const conversationText = messageChunk
+    private async checkAndCreateSummary(allMessages: any[], sessionId: string): Promise<void> {
+        const totalMessages = allMessages.length;
+        const olderMessagesCount = totalMessages - this.shortTermLimit;
+
+        if (olderMessagesCount > 0 && olderMessagesCount % this.shortTermLimit === 0) {
+            const summaryIndex = Math.floor(olderMessagesCount / this.shortTermLimit) - 1;
+
+            const existingSummary = await this.summariesCollection.findOne({
+                sessionId,
+                summaryIndex
+            });
+
+            if (!existingSummary) {
+                const startIndex = summaryIndex * this.shortTermLimit;
+                const endIndex = startIndex + this.shortTermLimit;
+                const messagesToSummarize = allMessages.slice(startIndex, endIndex);
+
+                const summary = await this.createSummary(messagesToSummarize);
+
+                await this.summariesCollection.insertOne({
+                    sessionId,
+                    summaryIndex,
+                    summary,
+                    messageCount: this.shortTermLimit,
+                    createdAt: new Date()
+                });
+            }
+        }
+    }
+
+    private async createSummary(messages: any[]): Promise<string> {
+        const conversationText = messages
             .map(msg => {
                 const role = msg._getType() === 'human' ? 'User' : 'Assistant';
                 return `${role}: ${msg.content}`;
             })
             .join('\n');
 
-        const summaryPrompt = `Summarize this conversation exchange in exactly ${this.summaryWordLimit} words or less. Focus on key topics, decisions, and important context that might be referenced later:
-
-${conversationText}
-
-Summary:`;
+        const summaryPrompt = `Summarize this conversation exchange in exactly ${this.summaryWordLimit} words or less. Focus on key topics, decisions, and important context:
+                                ${conversationText}
+                                Summary:`;
 
         const response = await this.model.invoke([new HumanMessage(summaryPrompt)]);
         const summary = typeof response.content === 'string'
@@ -100,5 +136,21 @@ Summary:`;
         return summary.length > this.summaryWordLimit * 6
             ? summary.substring(0, this.summaryWordLimit * 6) + '...'
             : summary;
+    }
+
+    async cleanupOldSummaries(sessionId: string, keepCount: number = 50): Promise<void> {
+        const summaries = await this.summariesCollection
+            .find({sessionId})
+            .sort({summaryIndex: -1})
+            .skip(keepCount)
+            .toArray();
+
+        if (summaries.length > 0) {
+            const oldSummaryIndexes = summaries.map((s: { summaryIndex: any; }) => s.summaryIndex);
+            await this.summariesCollection.deleteMany({
+                sessionId,
+                summaryIndex: {$in: oldSummaryIndexes}
+            });
+        }
     }
 }

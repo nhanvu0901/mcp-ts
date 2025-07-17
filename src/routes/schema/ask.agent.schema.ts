@@ -1,7 +1,7 @@
 export const AskAgentSchema = {
     tags: ["Ask Agent"],
     summary: "Ask the AI agent a question about documents in a specific collection",
-    description: "Submit a query to the AI agent which will search through documents in the specified collection",
+    description: "Submit a query to the AI agent which will search through documents in the specified collection and return source references",
     security: [
         {
             bearerAuth: []
@@ -29,14 +29,29 @@ export const AskAgentSchema = {
     },
     response: {
         200: {
-            description: "Agent response generated successfully",
+            description: "Agent response generated successfully with source references",
             type: "object",
             properties: {
                 success: { type: "boolean" },
                 response: { type: "string" },
                 user_id: { type: "string" },
                 collection_id: { type: "string" },
-                timestamp: { type: "string" }
+                timestamp: { type: "string" },
+                source_references: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            document_name: { type: "string" },
+                            page_number: { type: "number" },
+                            chunk_id: { type: "number" },
+                            source_reference: { type: "string" },
+                            reference_type: { type: "string", enum: ["page", "chunk"] }
+                        },
+                        required: ["document_name", "source_reference", "reference_type"]
+                    }
+                },
+                sources_count: { type: "number" }
             }
         },
         400: {

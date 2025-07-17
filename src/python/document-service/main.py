@@ -321,15 +321,36 @@ async def search_documents(search: DocumentSearch):
 
         results = []
         for hit in search_results:
-            results.append({
+            document_name = hit.payload.get("document_name", "Unknown Document")
+            page_number = hit.payload.get("page_number", 1)
+            chunk_id = hit.payload.get("chunk_id")
+            file_type = hit.payload.get("file_type", "").lower()
+
+            # Use page number for PDF and DOC/DOCX files, chunk_id for others
+            if file_type in ['pdf', 'doc', 'docx']:
+                citation = f"\\cite{{{document_name}, page {page_number}}}"
+                reference_type = "page"
+            else:
+                citation = f"\\cite{{{document_name}, chunk {chunk_id}}}"
+                reference_type = "chunk"
+
+            result_item = {
                 "document_id": hit.payload.get("document_id"),
-                "document_name": hit.payload.get("document_name"),
+                "document_name": document_name,
+                "page_number": page_number if file_type in ['pdf', 'doc', 'docx'] else None,
+                "chunk_id": chunk_id,
                 "text": hit.payload.get("text"),
                 "score": hit.score,
-                "chunk_id": hit.payload.get("chunk_id")
-            })
+                "citation": citation,
+                "reference_type": reference_type
+            }
+            results.append(result_item)
 
-        return {"results": results}
+        return {
+            "results": results,
+            "total_found": len(results),
+            "query": search.query
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

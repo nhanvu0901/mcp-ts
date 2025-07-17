@@ -4,16 +4,17 @@ from mcp.server.fastmcp import FastMCP
 from qdrant_client import QdrantClient
 from langchain_openai import AzureOpenAIEmbeddings
 import logging
+
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, # Set desired logging level (e.g., DEBUG, INFO, WARNING)
+logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
 qdrant_host = os.getenv("QDRANT_HOST")
 mcp = FastMCP(
     "RAGService",
-    instructions="RAG service that searches and retrieves relevant document chunks based on queries.",
+    instructions="RAG service that searches and retrieves relevant document chunks with source references.",
     host="0.0.0.0",
     port=8002,
 )
@@ -31,7 +32,7 @@ embedding_model = AzureOpenAIEmbeddings(
 @mcp.tool()
 async def retrieve(query: str, user_id: str, collection_id: str, limit: int = 5) -> str:
     """
-    Query Qdrant vector database and return matching results from user documents.
+    Query Qdrant vector database and return matching results with source references.
 
     Args:
         query: Text query to search for
@@ -40,9 +41,13 @@ async def retrieve(query: str, user_id: str, collection_id: str, limit: int = 5)
         limit: Maximum number of results to return
 
     Returns:
-        Concatenated text content from retrieved documents
+        Formatted text with source references including document name and page number
+        Example response format:
+        Based on your documents, [your natural language answer here]
+
+        SOURCE_CITATION: \\cite{document_name.pdf, page 5}
+        SOURCE_CITATION: \\cite{another_doc.txt, chunk 2}
     """
-    logger.info(f"${qdrant_client}")
     try:
         logger.debug(f"Generating embedding for query: '{query}'")
         query_embedding = embedding_model.embed_query(query)
@@ -57,13 +62,30 @@ async def retrieve(query: str, user_id: str, collection_id: str, limit: int = 5)
         )
         logger.info(f"Found {len(search_results)} results from Qdrant.")
 
-        results = []
+        if not search_results:
+            return f"No relevant documents found for query: '{query}'"
+
+        formatted_results = []
         for i, result in enumerate(search_results):
             text = result.payload.get('text', str(result.payload))
-            results.append(text)
-            logger.debug(f"Result {i+1}: {text[:100]}...") # Log first 100 characters of each result
+            document_name = result.payload.get('document_name', 'Unknown Document')
+            page_number = result.payload.get('page_number', 1)
+            chunk_id = result.payload.get('chunk_id', i)
+            file_type = result.payload.get('file_type', '').lower()
+            score = result.score or 0.0
 
-        return "\n".join(results)
+            # Use page number for PDF and DOC/DOCX files, chunk_id for others
+            if file_type in ['pdf', 'doc', 'docx']:
+                citation = f"\\cite{{{document_name}, page {page_number}}}"
+            else:
+                citation = f"\\cite{{{document_name}, chunk {chunk_id}}}"
+
+            formatted_chunk = f"**Relevance: {score:.3f}**\n{citation}\n{text}"
+            formatted_results.append(formatted_chunk)
+
+            logger.debug(f"Result {i + 1}: {document_name}, Page {page_number}, Score: {score:.3f}")
+
+        return "\n\n---\n\n".join(formatted_results)
 
     except Exception as e:
         logger.error(f"Error during retrieval for query '{query}': {e}", exc_info=True)

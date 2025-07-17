@@ -75,15 +75,10 @@ class QdrantService:
     
     def search_documents(self, query_vector: list, user_id: str, collection_id: str = None, limit: int = 10):
         try:
-            filter_conditions = [{"key": "user_id", "match": {"value": user_id}}]
-            
-            if collection_id:
-                filter_conditions.append({"key": "collection_id", "match": {"value": collection_id}})
-            
             search_results = self.client.search(
-                collection_name=self.collection_name,
+                collection_name=collection_id,
                 query_vector=query_vector,
-                query_filter={"must": filter_conditions},
+                query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
                 limit=limit
             )
             
