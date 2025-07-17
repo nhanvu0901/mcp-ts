@@ -130,6 +130,8 @@ async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClien
 
 **Important: You have access to conversation history context that appears as "Previous conversation summary" in the messages. Always check this context FIRST before using external services.**
 
+**Citation Handling**: When using RAGService, the retrieved text will contain inline citations in the format "SOURCE_CITATION: \\cite{document_name, page/chunk number}". When formulating your response, integrate these citations naturally into your answer while preserving the exact citation format.
+
 Workflow:
 1. **Check conversation history**: If the question can be answered from the conversation history context, answer directly from that context.
 2. **Document-specific requests**: If the user asks to summarize or translate a document with a specific document_id, use the appropriate service.
@@ -137,6 +139,7 @@ Workflow:
 4. **Fallback**: If neither the conversation history nor documents contain the answer, politely inform the user.
 
 **Always prioritize conversation history context over external services for personal information about the user.**`;
+
         return createReactAgent({
             llm: model,
             tools: tools,

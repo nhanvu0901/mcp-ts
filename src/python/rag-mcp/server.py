@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 qdrant_host = os.getenv("QDRANT_HOST")
 mcp = FastMCP(
     "RAGService",
-    instructions="RAG service that searches and retrieves relevant document chunks with source references.",
+    instructions="RAG service that searches and retrieves relevant document chunks with inline source references.",
     host="0.0.0.0",
     port=8002,
 )
@@ -32,7 +32,7 @@ embedding_model = AzureOpenAIEmbeddings(
 @mcp.tool()
 async def retrieve(query: str, user_id: str, collection_id: str, limit: int = 5) -> str:
     """
-    Query Qdrant vector database and return matching results with source references.
+    Query Qdrant vector database and return matching results with inline citations.
 
     Args:
         query: Text query to search for
@@ -41,12 +41,7 @@ async def retrieve(query: str, user_id: str, collection_id: str, limit: int = 5)
         limit: Maximum number of results to return
 
     Returns:
-        Formatted text with source references including document name and page number
-        Example response format:
-        Based on your documents, [your natural language answer here]
-
-        SOURCE_CITATION: \\cite{document_name.pdf, page 5}
-        SOURCE_CITATION: \\cite{another_doc.txt, chunk 2}
+        Formatted text with inline citations at the end of each text chunk
     """
     try:
         logger.debug(f"Generating embedding for query: '{query}'")
@@ -74,18 +69,17 @@ async def retrieve(query: str, user_id: str, collection_id: str, limit: int = 5)
             file_type = result.payload.get('file_type', '').lower()
             score = result.score or 0.0
 
-            # Use page number for PDF and DOC/DOCX files, chunk_id for others
             if file_type in ['pdf', 'doc', 'docx']:
-                citation = f"\\cite{{{document_name}, page {page_number}}}"
+                citation = f"SOURCE_CITATION: \\cite{{{document_name}, page {page_number}}}"
             else:
-                citation = f"\\cite{{{document_name}, chunk {chunk_id}}}"
+                citation = f"SOURCE_CITATION: \\cite{{{document_name}, chunk {chunk_id}}}"
 
-            formatted_chunk = f"**Relevance: {score:.3f}**\n{citation}\n{text}"
+            formatted_chunk = f"{text} {citation}"
             formatted_results.append(formatted_chunk)
 
             logger.debug(f"Result {i + 1}: {document_name}, Page {page_number}, Score: {score:.3f}")
 
-        return "\n\n---\n\n".join(formatted_results)
+        return "\n\n".join(formatted_results)
 
     except Exception as e:
         logger.error(f"Error during retrieval for query '{query}': {e}", exc_info=True)
