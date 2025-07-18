@@ -60,7 +60,7 @@ services:
       - mcp-network
 
   mongodb:
-    image: mongo:7.0
+    image: mongo:8.0.11
     container_name: mcp-mongodb
     restart: unless-stopped
     ports:

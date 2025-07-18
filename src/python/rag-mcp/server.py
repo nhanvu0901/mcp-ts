@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+#qdrant_host = 'localhost
 qdrant_host = os.getenv("QDRANT_HOST")
 mcp = FastMCP(
     "RAGService",

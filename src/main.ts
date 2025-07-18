@@ -29,7 +29,7 @@ const config = {
 
     AZURE_OPENAI_API_KEY: cleanEnvVar(process.env.AZURE_OPENAI_API_KEY),
     AZURE_OPENAI_ENDPOINT: cleanEnvVar(process.env.AZURE_OPENAI_ENDPOINT),
-    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'gpt-4'),
+    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'gpt-4o-mini'),
     AZURE_OPENAI_MODEL_API_VERSION: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_API_VERSION, '2024-02-15-preview'),
 
     RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/sse',
@@ -130,7 +130,16 @@ async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClien
 
 **Important: You have access to conversation history context that appears as "Previous conversation summary" in the messages. Always check this context FIRST before using external services.**
 
-**Citation Handling**: When using RAGService, the retrieved text will contain inline citations in the format "SOURCE_CITATION: \\cite{document_name, page/chunk number}". When formulating your response, integrate these citations naturally into your answer while preserving the exact citation format.
+**Citation Handling**: When using RAGService, the retrieved text will contain inline citations in the format "SOURCE_CITATION: \\cite{document_name, page/chunk number}". 
+
+**CRITICAL CITATION RULES:**
+1. You MUST preserve the exact "SOURCE_CITATION:" prefix format in your response.
+2. You MUST place citations immediately after the relevant sentence or claim they support.
+3. DO NOT group all citations at the end of your response.
+4. Each piece of information should have its citation right after the statement it supports.
+
+**Example of correct citation placement:**
+Simple reflex agents act based on current percepts using condition-action rules. SOURCE_CITATION: \\cite{ai agent.pdf, page 1} Model-based agents maintain internal state for decision-making. SOURCE_CITATION: \\cite{ai agent.pdf, page 2}
 
 Workflow:
 1. **Check conversation history**: If the question can be answered from the conversation history context, answer directly from that context.

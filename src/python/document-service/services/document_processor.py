@@ -85,14 +85,15 @@ class DocumentProcessor:
 
         metadata_list = []
         for i, page_number in enumerate(chunk_pages):
-            metadata_list.append({
+            base_metadata = {
                 "document_name": document_name,
                 "chunk_method": method,
                 "file_type": file_type,
-                "document_id": document_id,
-                "page_number": page_number
-            })
-
+                "document_id": document_id
+            }
+            if file_type in ['pdf', 'doc', 'docx']:
+                base_metadata["page_number"] = page_number
+            metadata_list.append(base_metadata)
         success = self.qdrant_service.upsert_chunks(chunks, embeddings, metadata_list, user_id)
 
         if success and self.mongo_service:
