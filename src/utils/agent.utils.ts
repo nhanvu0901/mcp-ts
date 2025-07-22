@@ -1,26 +1,34 @@
-export interface SourceReference {
-    document_name: string;
-    page_number?: number;
-    chunk_id?: number;
-    source_reference: string;
-    reference_type: 'page' | 'chunk';
-}
+import {SourceReference} from "../types/ask.agent.types";
+import {ExtractedContent} from "../types/ask.agent.types";
 
 export class AgentUtils {
-    static extractResponseContent(agentResponse: any): string {
+    static extractResponseContent(agentResponse: any): ExtractedContent {
         if (!agentResponse?.messages?.length) {
             throw new Error('Agent returned invalid response');
         }
 
         const lastMessage = agentResponse.messages[agentResponse.messages.length - 1];
+        let ragResponse = null;
+
+        if (agentResponse.messages.length >= 2) {
+            const secondLastMessage = agentResponse.messages[agentResponse.messages.length - 2];
+            if (secondLastMessage?.name?.includes('RAG') || secondLastMessage?.name?.includes('retrieve')) {
+                ragResponse = secondLastMessage.content;
+            }
+        }
 
         if (!lastMessage?.content) {
             throw new Error('Agent response missing content');
         }
 
-        return typeof lastMessage.content === 'string'
+        const aiResponse = typeof lastMessage.content === 'string'
             ? lastMessage.content
             : JSON.stringify(lastMessage.content);
+
+        return {
+            aiResponse,
+            ragResponse
+        };
     }
 
     static validateRequest(query: string, userId: string, collectionId: string): void {
@@ -37,7 +45,7 @@ export class AgentUtils {
         }
     }
 
-    static extractSourceReferences(responseText: string): SourceReference[] {
+    static extractSourceReferences(responseText: string, ragResponse: string | null = null): SourceReference[] {
         const sourceReferences: SourceReference[] = [];
         const seenRefs = new Set<string>();
 
@@ -68,12 +76,48 @@ export class AgentUtils {
                         sourceRef.chunk_id = num;
                     }
 
+                    if (ragResponse) {
+                        const textContent = this.extractTextForReference(ragResponse, documentName, refType, num);
+                        if (textContent) {
+                            sourceRef.text_content = textContent.text;
+                        }
+                    }
+
                     sourceReferences.push(sourceRef);
                 }
             }
         }
 
         return sourceReferences;
+    }
+
+    private static extractTextForReference(
+        ragResponse: string,
+        documentName: string,
+        refType: 'page' | 'chunk',
+        refNumber: number
+    ): { text: string} | null {
+        const lines = ragResponse.split('\n\n');
+
+        for (const line of lines) {
+            const citationMatch = line.match(/SOURCE_CITATION:\s*\\cite\{([^,]+),\s*(page|chunk)\s*([\d\-]+)\}/);
+            if (citationMatch) {
+                const lineDoctName = citationMatch[1].trim();
+                const lineRefType = citationMatch[2] as 'page' | 'chunk';
+                const lineRefValue = citationMatch[3].trim();
+
+                if (lineDoctName === documentName && lineRefType === refType) {
+                    const lineNumbers = this.parseNumberRange(lineRefValue);
+
+                    if (lineNumbers.includes(refNumber)) {
+                        const text = line.replace(/SOURCE_CITATION:.*$/, '').trim();
+                        return {text};
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     private static parseNumberRange(rangeStr: string): number[] {

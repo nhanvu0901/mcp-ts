@@ -4,6 +4,7 @@ export interface SourceReference {
     chunk_id?: number;
     source_reference: string;
     reference_type: 'page' | 'chunk';
+    text_content: string;
 }
 
 export interface AskAgentBody {
@@ -21,4 +22,9 @@ export interface AskAgentResponse {
     source_references?: SourceReference[];
     sources_count?: number;
     error?: string;
+}
+
+export interface ExtractedContent {
+    aiResponse: string;
+    ragResponse: string | null;
 }

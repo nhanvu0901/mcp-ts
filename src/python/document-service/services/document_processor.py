@@ -4,7 +4,7 @@ from .mongo_service import MongoService
 from .qdrant_service import QdrantService
 from .text_splitter import TextSplitter
 from .config import ChunkingMethod, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
-from .utils import extract_text, extract_text_with_pages
+from .utils import extract_text, extract_text_with_pages, clean_document_text
 from .config import DEFAULT_QDRANT_HOST
 
 
@@ -36,6 +36,8 @@ class DocumentProcessor:
 
         text = extract_text(file_path)
 
+        text = clean_document_text(text)
+
         meta = metadata or {}
         meta.update({
             "document_name": document_name,
@@ -62,6 +64,8 @@ class DocumentProcessor:
                           page_info: list = None,
                           **kwargs):
 
+        text = clean_document_text(text)
+
         if method == "auto":
             method = self.text_splitter.auto_select_method(file_type)
 
@@ -72,6 +76,9 @@ class DocumentProcessor:
         else:
             chunks = self.text_splitter.split_text(text, method, chunk_size, overlap, **kwargs)
             chunk_pages = [1] * len(chunks)
+
+
+        chunks = [clean_document_text(chunk) for chunk in chunks if clean_document_text(chunk).strip()]
 
         if not chunks:
             print(f"No chunks created for document_id={document_id}")
@@ -94,6 +101,7 @@ class DocumentProcessor:
             if file_type in ['pdf', 'doc', 'docx']:
                 base_metadata["page_number"] = page_number
             metadata_list.append(base_metadata)
+
         success = self.qdrant_service.upsert_chunks(chunks, embeddings, metadata_list, user_id)
 
         if success and self.mongo_service:
@@ -145,6 +153,7 @@ class DocumentProcessor:
                 raise ValueError("MongoDB service not initialized")
 
             text = extract_text(file_path)
+
             meta = metadata or {}
             meta.update({
                 "document_name": document_name,

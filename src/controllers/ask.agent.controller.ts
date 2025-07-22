@@ -14,26 +14,24 @@ export class AskAgentController {
 
             AgentUtils.validateRequest(query, userId, collectionId);
 
-            const agentResponse = await AskAgentController.processAgentQuestion(
+            const { aiResponse, ragResponse } = await AskAgentController.processAgentQuestion(
                 request,
                 query,
                 userId,
                 collectionId
             );
 
-            const sourceReferences = AgentUtils.extractSourceReferences(agentResponse);
-
+            const sourceReferences = AgentUtils.extractSourceReferences(aiResponse, ragResponse);
 
             return reply.send({
                 success: true,
-                response: agentResponse,
+                response: aiResponse,
                 user_id: userId,
                 collection_id: collectionId,
                 timestamp: new Date().toISOString(),
                 source_references: sourceReferences,
                 sources_count: sourceReferences.length
             });
-
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             const statusCode = errorMessage.includes('required') ? 400 : 500;
@@ -55,7 +53,7 @@ export class AskAgentController {
         query: string,
         userId: string,
         collectionId: string
-    ): Promise<string> {
+    ): Promise<{ aiResponse: string; ragResponse: string | null }> {
         try {
             const { agent, mongoClient, model } = request.server;
 
@@ -76,11 +74,11 @@ export class AskAgentController {
             ];
 
             const agentResponse = await agent.invoke({ messages });
-            const responseContent = AgentUtils.extractResponseContent(agentResponse);
+            const { aiResponse, ragResponse } = AgentUtils.extractResponseContent(agentResponse);
 
-            await chatHistoryService.saveConversation(chatHistory, query, responseContent, sessionId);
+            await chatHistoryService.saveConversation(chatHistory, query, aiResponse, sessionId);
 
-            return responseContent;
+            return { aiResponse, ragResponse };
 
         } catch (error) {
             request.log.error({
