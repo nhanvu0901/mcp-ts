@@ -23,4 +23,7 @@ db.chat_summaries.createIndex({ createdAt: 1 }, { expireAfterSeconds: 2592000 })
 db.chat_memory.createIndex({ SessionId: 1 });
 db.chat_memory.createIndex({ CreatedAt: -1 });
 
-print('Database, collections, and indexes created successfully');
+// Create indexes for documents collection
+db.documents.createIndex({ user_id: 1, upload_date: -1 }, { name: "user_upload_date_idx" });
+db.documents.createIndex({ user_id: 1, normalized_name: 1 }, { name: "user_normalized_name_idx" });
+db.documents.createIndex({ user_id: 1, collection_id: 1 }, { name: "user_collection_idx" });
