@@ -15,6 +15,7 @@ import dotenv from 'dotenv';
 import fp from 'fastify-plugin';
 import errorHandlerPlugin from './plugins/errorHandler.plugin'
 
+
 dotenv.config();
 
 function cleanEnvVar(value: string | undefined, defaultValue: string = ''): string {
@@ -26,7 +27,7 @@ const config = {
     HOST: process.env.HOST || '0.0.0.0',
     PORT: parseInt(process.env.PORT || '3000'),
     NODE_ENV: process.env.NODE_ENV || 'development',
-
+    DEBUG: process.env.DEBUG,
     AZURE_OPENAI_API_KEY: cleanEnvVar(process.env.AZURE_OPENAI_API_KEY),
     AZURE_OPENAI_ENDPOINT: cleanEnvVar(process.env.AZURE_OPENAI_ENDPOINT),
     AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'gpt-4o-mini'),
@@ -58,6 +59,46 @@ function validateConfig() {
     if (missing.length > 0) {
         throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
     }
+}
+
+async function setupDebugHooks(server: FastifyInstance): Promise<void> {
+    const debugEnabled = config.DEBUG === 'true' || config.NODE_ENV === 'development';
+
+    if (!debugEnabled) return;
+
+    // Hook that runs before every request
+    server.addHook('onRequest', async (request, reply) => {
+        request.log.debug({
+            method: request.method,
+            url: request.url,
+            query: request.query,
+            headers: request.headers,
+            body: request.body,
+            params: request.params,
+            requestId: request.id
+        }, 'Incoming request');
+    });
+
+    // Hook that runs after every request
+    server.addHook('onResponse', async (request, reply) => {
+        request.log.debug({
+            method: request.method,
+            url: request.url,
+            statusCode: reply.statusCode,
+            requestId: request.id
+        }, 'Outgoing response');
+    });
+
+    // Hook that runs on every error
+    server.addHook('onError', async (request, reply, error) => {
+        request.log.error({
+            method: request.method,
+            url: request.url,
+            error: error.message,
+            stack: error.stack,
+            requestId: request.id
+        }, 'Request error');
+    });
 }
 
 function setupModel(): AzureChatOpenAI {
@@ -287,6 +328,7 @@ async function buildServer(): Promise<FastifyInstance> {
     await registerPlugins(server);
     await registerRoutes(server);
     await setupDirectories();
+    await setupDebugHooks(server)
 
     const gracefulShutdown = async (signal: string) => {
         server.log.info(`Received ${signal}, shutting down gracefully...`);
