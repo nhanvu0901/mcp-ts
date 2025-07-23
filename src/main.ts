@@ -66,38 +66,100 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
 
     if (!debugEnabled) return;
 
-    // Hook that runs before every request
     server.addHook('onRequest', async (request, reply) => {
+        const startTime = process.hrtime.bigint();
+        const memoryUsage = process.memoryUsage();
+
+        (request as any).debugInfo = {
+            startTime,
+            startMemory: memoryUsage
+        };
+
         request.log.debug({
             method: request.method,
             url: request.url,
+            fullUrl: request.protocol + '://' + request.hostname + request.url,
             query: request.query,
-            headers: request.headers,
-            body: request.body,
             params: request.params,
-            requestId: request.id
-        }, 'Incoming request');
+            body: request.method !== 'GET' ? request.body : undefined,
+            clientIp: request.ip,
+            ips: request.ips,
+            protocol: request.protocol,
+            isMultipart: request.isMultipart(),
+            timestamp: new Date().toISOString()
+        });
+    });
+    server.addHook('preHandler', async (request, reply) => {
+        request.log.debug({
+            requestId: request.id,
+            method: request.method,
+            url: request.url,
+            body: request.body,
+            bodySize: request.body ? `${Buffer.byteLength(JSON.stringify(request.body))} bytes` : '0 bytes',
+            contentType: request.headers['content-type'],
+            isMultipart: request.isMultipart(),
+
+        }, '📦 REQUEST BODY PARSED');
     });
 
-    // Hook that runs after every request
     server.addHook('onResponse', async (request, reply) => {
+        const debugInfo = (request as any).debugInfo;
+        const endTime = process.hrtime.bigint();
+        const totalDuration = Number(endTime - debugInfo.startTime) / 1000000;
+
         request.log.debug({
+            requestId: request.id,
             method: request.method,
             url: request.url,
             statusCode: reply.statusCode,
-            requestId: request.id
-        }, 'Outgoing response');
+            totalTime: `${totalDuration.toFixed(2)}ms`,
+            success: reply.statusCode < 400,
+            clientError: reply.statusCode >= 400 && reply.statusCode < 500,
+            serverError: reply.statusCode >= 500,
+            timestamp: new Date().toISOString()
+        });
     });
 
-    // Hook that runs on every error
     server.addHook('onError', async (request, reply, error) => {
+        const debugInfo = (request as any).debugInfo;
+        const errorTime = debugInfo ? process.hrtime.bigint() : process.hrtime.bigint();
+        const duration = debugInfo ? Number(errorTime - debugInfo.startTime) / 1000000 : 0;
+
         request.log.error({
+            requestId: request.id,
             method: request.method,
             url: request.url,
-            error: error.message,
+            errorName: error.name,
+            errorMessage: error.message,
+            errorCode: (error as any).code || 'UNKNOWN',
+            statusCode: (error as any).statusCode || 500,
             stack: error.stack,
-            requestId: request.id
-        }, 'Request error');
+            duration: `${duration.toFixed(2)}ms`,
+            query: request.query,
+            params: request.params,
+            body: request.method !== 'GET' ? request.body : undefined,
+            headers: {
+                userAgent: request.headers['user-agent'],
+                contentType: request.headers['content-type'],
+                origin: request.headers.origin
+            },
+            clientIp: request.ip,
+            timestamp: new Date().toISOString(),
+            errorLocation: {
+                function: error.stack?.split('\n')[1]?.trim(),
+                file: error.stack?.split('\n')[1]?.match(/\((.+):\d+:\d+\)/)?.[1]
+            }
+        });
+    });
+
+    server.addHook('onTimeout', async (request, reply) => {
+        request.log.warn({
+            requestId: request.id,
+            method: request.method,
+            url: request.url,
+            timeout: server.server.timeout,
+            timestamp: new Date().toISOString()
+        });
     });
 }
 
