@@ -1,7 +1,7 @@
 export const AskAgentSchema = {
     tags: ["Ask Agent"],
-    summary: "Ask the AI agent a question about documents in a specific collection",
-    description: "Submit a query to the AI agent which will search through documents in the specified collection and return source references",
+    summary: "Ask the AI agent a question about documents in a collection or about a specific document",
+    description: "Submit a query to the AI agent which will either search through all documents in the collection or process a specific document when doc_id are provided",
     security: [
         {
             bearerAuth: []
@@ -13,7 +13,7 @@ export const AskAgentSchema = {
         properties: {
             query: {
                 type: "string",
-                description: "The query to search for in documents",
+                description: "The query to search for in documents or question about specific document",
                 minLength: 1,
                 maxLength: 2000
             },
@@ -24,7 +24,11 @@ export const AskAgentSchema = {
             collection_id: {
                 type: "string",
                 description: "Collection identifier to search within"
-            }
+            },
+            doc_id: {
+                type: "string",
+                description: "Optional document ID for document-specific queries"
+            },
         }
     },
     response: {
@@ -37,6 +41,7 @@ export const AskAgentSchema = {
                 user_id: {type: "string"},
                 collection_id: {type: "string"},
                 timestamp: {type: "string"},
+                query_type: {type: "string", enum: ["document_specific", "general"]},
                 source_references: {
                     type: "array",
                     items: {

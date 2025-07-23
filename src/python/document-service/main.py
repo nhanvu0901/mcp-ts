@@ -16,7 +16,7 @@ load_dotenv()
 from services.document_processor import DocumentProcessor
 from services.mongo_service import MongoService
 from services.config import MONGODB_URI
-
+from datetime import datetime, timezone
 app = FastAPI(title="Document Service API")
 
 mongo_client = MongoClient(MONGODB_URI)
@@ -41,6 +41,39 @@ class DocumentSearch(BaseModel):
     user_id: str
     collection_id: Optional[str] = None
 
+
+@app.get("/documents/references")
+async def get_document_references(user_id: str):
+    try:
+        print(f"=== GET DOCUMENT REFERENCES (30 DAYS) ===")
+        print(f"User ID: {user_id}")
+
+        docs = mongo_service.list_user_documents_last_30_days(user_id)
+
+        print(f"Found {len(docs)} documents from last 30 days")
+
+        result = []
+        for doc in docs:
+            result.append({
+                "document_id": doc["_id"],
+                "document_name": doc.get("document_name"),
+                "normalized_name": doc.get("normalized_name"),
+                "collection_id": doc.get("collection_id"),
+                "file_type": doc.get("file_type"),
+                "upload_date": doc.get("upload_date")
+            })
+
+        return {
+            "documents": result,
+            "total_count": len(result),
+            "sync_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        print(f"Error getting document references: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/collections")
 async def create_collection(collection: CollectionCreate):
@@ -167,6 +200,14 @@ async def upload_document(
         print(f"Embed: {embed}")
         print(f"Document ID: {document_id}")
 
+        normalized_filename = mongo_service.normalize_document_name(file.filename)
+
+        if mongo_service.check_document_name_exists(user_id, collection_id, normalized_filename):
+            raise HTTPException(
+                status_code=409,
+                detail=f"A document with the name '{file.filename}' already exists in this collection"
+            )
+
         qdrant_collection_name = "default"
 
         if collection_id:
@@ -220,10 +261,21 @@ async def upload_document(
 
         if success:
             print(f"Document uploaded successfully: {document_id}")
-            return {"document_id": document_id, "status": "uploaded"}
+            return {
+                "document_id": document_id,
+                "document_name": file.filename,
+                "normalized_name": normalized_filename,
+                "file_type": file_extension,
+                "collection_id": collection_id,
+                "status": "uploaded"
+            }
         else:
             raise HTTPException(status_code=500, detail="Failed to process document")
 
+    except HTTPException:
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise
     except Exception as e:
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
@@ -246,11 +298,12 @@ async def get_document_info(document_id: str):
 
         return {
             "document_id": document_id,
-            "name": doc.get("document_name"),
+            "document_name": doc.get("document_name"),
+            "normalized_name": doc.get("normalized_name"),
             "file_type": doc.get("file_type"),
             "user_id": doc.get("user_id"),
             "collection_id": doc.get("collection_id"),
-            "upload_date": doc.get("_id").generation_time if hasattr(doc.get("_id"), "generation_time") else None
+            "upload_date": doc.get("upload_date")
         }
 
     except HTTPException:
@@ -276,10 +329,11 @@ async def list_documents(user_id: str, collection_id: Optional[str] = None):
         for doc in docs:
             result.append({
                 "document_id": doc["_id"],
-                "name": doc.get("document_name"),
+                "document_name": doc.get("document_name"),
+                "normalized_name": doc.get("normalized_name"),
                 "file_type": doc.get("file_type"),
                 "collection_id": doc.get("collection_id"),
-                "upload_date": doc.get("_id").generation_time if hasattr(doc.get("_id"), "generation_time") else None
+                "upload_date": doc.get("upload_date")
             })
 
         return {"documents": result}

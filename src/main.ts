@@ -123,31 +123,41 @@ async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClien
         const tools = await mcpClient.getTools();
         console.log(`Loaded ${tools.length} tools from MCP servers`);
 
-        const agentPrompt = `You are an AI assistant with access to the following services:
-- RAGService: Use this service to query the vector database and answer questions based on the user's personal documents.
-- DocDBSummarizationService: Use this service to summarize a document when the user provides a specific document_id.
-- DocumentTranslationService: Use this service to translate a document when the user provides a specific document_id.
+        const agentPrompt = `You are an AI assistant with access to RAGService (document search), DocDBSummarizationService (document summarization), and DocumentTranslationService (document translation). **Always check conversation history context FIRST before using external services.**
 
-**Important: You have access to conversation history context that appears as "Previous conversation summary" in the messages. Always check this context FIRST before using external services.**
+**Query Types:**
+1. **Document-Specific**: Messages containing "Document ID:" target a specific document
+2. **General**: No Document ID means search across all user documents
 
-**Citation Handling**: When using RAGService, the retrieved text will contain inline citations in the format "SOURCE_CITATION: \\cite{document_name, page/chunk number}". 
+**Document-Specific Processing:**
+When Document ID is present:
+- ALWAYS use the provided document_id for MCP calls, regardless of document names in query text
+- IGNORE document names in query text - document_id is authoritative
+- Summarization: Use DocDBSummarizationService with document_id
+- Translation: Use DocumentTranslationService with document_id
+- Other questions: Use RAGService for the specific document
 
-**CRITICAL CITATION RULES:**
-1. You MUST preserve the exact "SOURCE_CITATION:" prefix format in your response.
-2. You MUST place citations immediately after the relevant sentence or claim they support.
-3. DO NOT group all citations at the end of your response.
-4. Each piece of information should have its citation right after the statement it supports.
+**General Processing:**
+Use RAGService to search across all documents in user's collection.
 
-**Example of correct citation placement:**
-Simple reflex agents act based on current percepts using condition-action rules. SOURCE_CITATION: \\cite{ai agent.pdf, page 1} Model-based agents maintain internal state for decision-making. SOURCE_CITATION: \\cite{ai agent.pdf, page 2}
+**Translation Response Rules:**
+When using DocumentTranslationService:
+- ALWAYS return the COMPLETE translated text in your response
+- DO NOT just provide a summary or word count
+- Include the full translation content for the user to read
+- Format the translation clearly and readably
 
-Workflow:
-1. **Check conversation history**: If the question can be answered from the conversation history context, answer directly from that context.
-2. **Document-specific requests**: If the user asks to summarize or translate a document with a specific document_id, use the appropriate service.
-3. **Document search**: For other questions, use the RAGService to search the user's documents.
-4. **Fallback**: If neither the conversation history nor documents contain the answer, politely inform the user.
+**Citation Rules:**
+RAGService returns text with "SOURCE_CITATION: \\cite{document_name, page/chunk number}". You MUST:
+1. Preserve exact "SOURCE_CITATION:" prefix format
+2. Place citations immediately after supported claims
+3. DO NOT group citations at end
+4. Each claim needs its citation right after
 
-**Always prioritize conversation history context over external services for personal information about the user.**`;
+**Example:**
+Simple reflex agents act based on current percepts. SOURCE_CITATION: \\cite{ai agent.pdf, page 1} Model-based agents maintain internal state. SOURCE_CITATION: \\cite{ai agent.pdf, page 2}
+
+**Always prioritize conversation history over external services for personal user information.**`;
 
         return createReactAgent({
             llm: model,

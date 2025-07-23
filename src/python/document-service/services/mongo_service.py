@@ -1,6 +1,8 @@
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
 from .config import MONGODB_DB
+from datetime import datetime, timezone, timedelta
+import re
 
 
 class MongoService:
@@ -11,7 +13,21 @@ class MongoService:
         self.mongo_client = mongo_client
         self.db_name = MONGODB_DB
 
-    def check_mongo_database(self,type: str):
+    @staticmethod
+    def normalize_document_name(original_name: str) -> str:
+        if not original_name:
+            return ""
+        normalized = original_name.lower()
+        # Remove extra spaces and replace with single space
+        normalized = re.sub(r'\s+', ' ', normalized)
+        # Strip leading/trailing spaces
+        normalized = normalized.strip()
+        # Remove special characters except dots, hyphens, underscores
+        normalized = re.sub(r'[^\w\s\.-]', '', normalized)
+
+        return normalized
+
+    def check_mongo_database(self, type: str):
         if not self.mongo_client:
             print("[MongoDB] No client provided, skipping save.")
             return False
@@ -26,12 +42,19 @@ class MongoService:
         try:
             db = self.mongo_client[self.db_name]
             collection = db[self.DOCUMENTS_COLLECTION]
+            upload_date = datetime.now(timezone.utc)
+
+            document_name = metadata.get("document_name", "") if metadata else ""
+            normalized_name = self.normalize_document_name(document_name)
 
             doc = {
                 "_id": document_id,
                 "text": text,
                 "user_id": user_id,
+                "upload_date": upload_date,
+                "normalized_name": normalized_name
             }
+
             if metadata:
                 doc.update(metadata)
 
@@ -55,11 +78,15 @@ class MongoService:
             db = self.mongo_client[self.db_name]
             collection = db[self.COLLECTIONS_COLLECTION]
 
+            upload_date = datetime.now(timezone.utc)
+
             doc = {
                 "_id": collection_id,
                 "name": name,
                 "user_id": user_id,
+                "upload_date": upload_date
             }
+
             if metadata:
                 doc.update(metadata)
 
@@ -75,6 +102,53 @@ class MongoService:
         except OperationFailure as e:
             print(f"[MongoDB] Operation failed for collection_id={collection_id}: {e}")
             return False
+
+    def check_document_name_exists(self, user_id: str, collection_id: str, normalized_name: str) -> bool:
+        if not self.mongo_client:
+            return False
+
+        try:
+            db = self.mongo_client[self.db_name]
+            collection = db[self.DOCUMENTS_COLLECTION]
+
+            query = {
+                "user_id": user_id,
+                "normalized_name": normalized_name
+            }
+
+            if collection_id:
+                query["collection_id"] = collection_id
+
+            existing_doc = collection.find_one(query)
+            return existing_doc is not None
+
+        except Exception as e:
+            print(f"[MongoDB] Error checking document name existence: {e}")
+            return False
+
+    def list_user_documents_last_30_days(self, user_id: str) -> list:
+        if not self.mongo_client:
+            return []
+
+        try:
+            db = self.mongo_client[self.db_name]
+            collection = db[self.DOCUMENTS_COLLECTION]
+
+            # Calculate 30 days ago from now in UTC
+            thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+
+            query = {
+                "user_id": user_id,
+                "upload_date": {"$gte": thirty_days_ago}
+            }
+
+            # Sort by upload_date descending (newest first)
+            docs = list(collection.find(query).sort("upload_date", -1))
+            return docs
+
+        except Exception as e:
+            print(f"[MongoDB] List recent documents failed for user_id={user_id}: {e}")
+            return []
 
     def get_document_text(self, document_id: str, user_id: str) -> str:
         if not self.mongo_client:

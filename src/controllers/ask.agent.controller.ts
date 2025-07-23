@@ -10,15 +10,19 @@ export class AskAgentController {
         reply: FastifyReply
     ): Promise<AskAgentResponse> {
         try {
-            const { query, user_id: userId, collection_id: collectionId } = request.body;
+            const { query, user_id: userId, collection_id: collectionId, doc_id: docId } = request.body;
 
             AgentUtils.validateRequest(query, userId, collectionId);
+
+            const isDocumentSpecific = !!docId;
+            const queryType = isDocumentSpecific ? 'document_specific' : 'general';
 
             const { aiResponse, ragResponse } = await AskAgentController.processAgentQuestion(
                 request,
                 query,
                 userId,
-                collectionId
+                collectionId,
+                docId
             );
 
             const sourceReferences = AgentUtils.extractSourceReferences(aiResponse, ragResponse);
@@ -29,6 +33,7 @@ export class AskAgentController {
                 user_id: userId,
                 collection_id: collectionId,
                 timestamp: new Date().toISOString(),
+                query_type: queryType,
                 source_references: sourceReferences,
                 sources_count: sourceReferences.length
             });
@@ -52,7 +57,8 @@ export class AskAgentController {
         request: FastifyRequest,
         query: string,
         userId: string,
-        collectionId: string
+        collectionId: string,
+        docId?: string
     ): Promise<{ aiResponse: string; ragResponse: string | null }> {
         try {
             const { agent, mongoClient, model } = request.server;
@@ -68,9 +74,17 @@ export class AskAgentController {
             const allMessages = await chatHistory.getMessages();
             const contextMessages = await chatHistoryService.buildContextMessages(allMessages, sessionId);
 
+            let userMessage: string;
+
+            if (docId) {
+                userMessage = `User ID: ${userId}, Collection ID: ${collectionId}, Document ID: ${docId}\n\nDocument-specific query: ${query}`;
+            } else {
+                userMessage = `User ID: ${userId}, Collection ID: ${collectionId}\n\nGeneral query: ${query}`;
+            }
+
             const messages = [
                 ...contextMessages,
-                new HumanMessage(`User ID: ${userId}, Collection ID: ${collectionId}\n\nQuery: ${query}`)
+                new HumanMessage(userMessage)
             ];
 
             const agentResponse = await agent.invoke({ messages });
@@ -84,7 +98,8 @@ export class AskAgentController {
             request.log.error({
                 error: error instanceof Error ? error.message : String(error),
                 userId,
-                collectionId
+                collectionId,
+                docId
             }, 'Agent processing failed');
             throw new Error(`Agent processing failed: ${error instanceof Error ? error.message : String(error)}`);
         }

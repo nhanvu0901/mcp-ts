@@ -11,6 +11,7 @@ export interface AskAgentBody {
     query: string;
     user_id: string;
     collection_id: string;
+    doc_id?: string;
 }
 
 export interface AskAgentResponse {
@@ -22,6 +23,7 @@ export interface AskAgentResponse {
     source_references?: SourceReference[];
     sources_count?: number;
     error?: string;
+    query_type?: 'document_specific' | 'general';
 }
 
 export interface ExtractedContent {
