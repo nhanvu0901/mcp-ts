@@ -238,6 +238,10 @@ async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClien
 **Query Types:**
 1. **Document-Specific**: Messages containing "Document ID:" target a specific document
 2. **General**: No Document ID means search across all user documents
+3. **Multi-Collection**: The collection_id parameter is always a list of collection IDs (UUIDs). You must always send a list, even if there is only one collection.
+
+**Collection ID Format:**
+- The collection_id is always a list of UUIDs (universally unique identifiers). Treat these as unique database identifiers, not as document names or user-friendly labels. Do not attempt to parse or interpret them as anything else. Never send a single string; always send a list.
 
 **Document-Specific Processing:**
 When Document ID is present:
@@ -249,6 +253,9 @@ When Document ID is present:
 
 **General Processing:**
 Use RAGService to search across all documents in user's collection.
+
+**Multi-Collection Processing:**
+When collection_id is a list, RAGService will search across all specified collections, merge the results, and return the most relevant ones. You should treat the aggregated results as a unified set and present the top answers to the user, regardless of which collection they came from.
 
 **Translation Response Rules:**
 When using DocumentTranslationService:

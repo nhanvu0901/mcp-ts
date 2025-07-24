@@ -31,7 +31,7 @@ export class AgentUtils {
         };
     }
 
-    static validateRequest(query: string, userId: string, collectionId: string): void {
+    static validateRequest(query: string, userId: string, collectionId: string | string[]): void {
         if (!query?.trim()) {
             throw new Error('Query is required and cannot be empty');
         }
@@ -40,7 +40,11 @@ export class AgentUtils {
             throw new Error('user_id is required');
         }
 
-        if (!collectionId) {
+        if (
+            collectionId === undefined ||
+            (typeof collectionId === 'string' && !collectionId) ||
+            (Array.isArray(collectionId) && collectionId.length === 0)
+        ) {
             throw new Error('collection_id is required');
         }
     }

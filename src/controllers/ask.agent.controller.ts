@@ -21,7 +21,7 @@ export class AskAgentController {
                 request,
                 query,
                 userId,
-                collectionId,
+                collectionId, // can be string or string[]
                 docId
             );
 
@@ -57,7 +57,7 @@ export class AskAgentController {
         request: FastifyRequest,
         query: string,
         userId: string,
-        collectionId: string,
+        collectionId: string | string[],
         docId?: string
     ): Promise<{ aiResponse: string; ragResponse: string | null }> {
         try {
@@ -67,9 +67,12 @@ export class AskAgentController {
                 throw new Error('Required services not initialized on server instance');
             }
 
-            const sessionId = `${userId}_${collectionId}`;
+            // Always treat collectionId as an array
+            const collectionIds: string[] = Array.isArray(collectionId) ? collectionId : [collectionId];
+            const sessionCollectionId = collectionIds.join(',');
+            const sessionId = `${userId}_${sessionCollectionId}`;
             const chatHistoryService = new ChatHistoryService(mongoClient, model);
-            const chatHistory = await chatHistoryService.getChatHistory(userId, collectionId);
+            const chatHistory = await chatHistoryService.getChatHistory(userId, sessionCollectionId);
 
             const allMessages = await chatHistory.getMessages();
             const contextMessages = await chatHistoryService.buildContextMessages(allMessages, sessionId);
@@ -77,9 +80,9 @@ export class AskAgentController {
             let userMessage: string;
 
             if (docId) {
-                userMessage = `User ID: ${userId}, Collection ID: ${collectionId}, Document ID: ${docId}\n\nDocument-specific query: ${query}`;
+                userMessage = `User ID: ${userId}, Collection ID: ${sessionCollectionId}, Document ID: ${docId}\n\nDocument-specific query: ${query}`;
             } else {
-                userMessage = `User ID: ${userId}, Collection ID: ${collectionId}\n\nGeneral query: ${query}`;
+                userMessage = `User ID: ${userId}, Collection ID: ${sessionCollectionId}\n\nGeneral query: ${query}`;
             }
 
             const messages = [
@@ -87,7 +90,15 @@ export class AskAgentController {
                 new HumanMessage(userMessage)
             ];
 
-            const agentResponse = await agent.invoke({ messages });
+            // Pass structured tool input to the agent, always as array
+            const toolInput: Record<string, any> = {
+                query,
+                user_id: userId,
+                collection_id: collectionIds,
+            };
+            if (docId) toolInput.doc_id = docId;
+
+            const agentResponse = await agent.invoke({ messages, toolInput });
             const { aiResponse, ragResponse } = AgentUtils.extractResponseContent(agentResponse);
 
             await chatHistoryService.saveConversation(chatHistory, query, aiResponse, sessionId);

@@ -22,8 +22,11 @@ export const AskAgentSchema = {
                 description: "User identifier"
             },
             collection_id: {
-                type: "string",
-                description: "Collection identifier to search within"
+                anyOf: [
+                    { type: "string" },
+                    { type: "array", items: { type: "string" }, minItems: 1 }
+                ],
+                description: "Collection identifier(s) to search within. Can be a string or an array of strings."
             },
             doc_id: {
                 type: "string",

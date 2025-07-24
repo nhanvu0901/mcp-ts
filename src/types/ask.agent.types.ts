@@ -10,7 +10,7 @@ export interface SourceReference {
 export interface AskAgentBody {
     query: string;
     user_id: string;
-    collection_id: string;
+    collection_id: string | string[];
     doc_id?: string;
 }
 
