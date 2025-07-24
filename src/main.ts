@@ -66,38 +66,107 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
 
     if (!debugEnabled) return;
 
-    // Hook that runs before every request
     server.addHook('onRequest', async (request, reply) => {
+        (request as any).debugInfo = {
+            startTime: process.hrtime.bigint()
+        };
+    });
+
+    server.addHook('preHandler', async (request, reply) => {
         request.log.debug({
+            requestId: request.id,
             method: request.method,
             url: request.url,
-            query: request.query,
-            headers: request.headers,
             body: request.body,
-            params: request.params,
-            requestId: request.id
-        }, 'Incoming request');
+            bodySize: request.body ? `${Buffer.byteLength(JSON.stringify(request.body))} bytes` : '0 bytes',
+            contentType: request.headers['content-type'],
+            isMultipart: request.isMultipart(),
+
+        }, 'REQUEST BODY DATA');
     });
 
-    // Hook that runs after every request
-    server.addHook('onResponse', async (request, reply) => {
-        request.log.debug({
-            method: request.method,
-            url: request.url,
-            statusCode: reply.statusCode,
-            requestId: request.id
-        }, 'Outgoing response');
+    server.addHook('onSend', async (request, reply, payload) => {
+        let responseBody: any = payload;
+        let responseSize = 0;
+        try {
+            if (typeof payload === 'string') {
+                responseSize = Buffer.byteLength(payload);
+                if (responseSize < 10000) {
+                    try {
+                        responseBody = JSON.parse(payload);
+                    } catch {
+                        responseBody = payload;
+                    }
+                } else {
+                    responseBody = `[Large response: ${responseSize} bytes]`;
+                }
+            } else if (Buffer.isBuffer(payload)) {
+                responseSize = payload.length;
+                responseBody = `[Buffer: ${responseSize} bytes]`;
+            } else if (payload && typeof payload === 'object') {
+                const payloadStr = JSON.stringify(payload);
+                responseSize = Buffer.byteLength(payloadStr);
+                responseBody = responseSize < 10000 ? payload : `[Large object: ${responseSize} bytes]`;
+            }
+
+            request.log.debug({
+                requestId: request.id,
+                method: request.method,
+                url: request.url,
+                statusCode: reply.statusCode,
+                responseBody: responseBody,
+                responseSize: `${responseSize} bytes`,
+                contentType: reply.getHeader('content-type'),
+                timestamp: new Date().toISOString()
+            }, 'RESPONSE BODY DATA');
+        } catch (error) {
+            request.log.warn({
+                requestId: request.id,
+            }, 'Failed to log response body '+error);
+        }
+        return payload;
     });
 
-    // Hook that runs on every error
     server.addHook('onError', async (request, reply, error) => {
+        const debugInfo = (request as any).debugInfo;
+        const errorTime = debugInfo ? process.hrtime.bigint() : process.hrtime.bigint();
+        const duration = debugInfo ? Number(errorTime - debugInfo.startTime) / 1000000 : 0;
+
         request.log.error({
+            requestId: request.id,
             method: request.method,
             url: request.url,
-            error: error.message,
+            errorName: error.name,
+            errorMessage: error.message,
+            errorCode: (error as any).code || 'UNKNOWN',
+            statusCode: (error as any).statusCode || 500,
             stack: error.stack,
-            requestId: request.id
-        }, 'Request error');
+            duration: `${duration.toFixed(2)}ms`,
+            query: request.query,
+            params: request.params,
+            body: request.method !== 'GET' ? request.body : undefined,
+            headers: {
+                userAgent: request.headers['user-agent'],
+                contentType: request.headers['content-type'],
+                origin: request.headers.origin
+            },
+            clientIp: request.ip,
+            timestamp: new Date().toISOString(),
+            errorLocation: {
+                function: error.stack?.split('\n')[1]?.trim(),
+                file: error.stack?.split('\n')[1]?.match(/\((.+):\d+:\d+\)/)?.[1]
+            }
+        },'ERROR DATA');
+    });
+
+    server.addHook('onTimeout', async (request, reply) => {
+        request.log.warn({
+            requestId: request.id,
+            method: request.method,
+            url: request.url,
+            timeout: server.server.timeout,
+            timestamp: new Date().toISOString()
+        },'TIMEOUT');
     });
 }
 
