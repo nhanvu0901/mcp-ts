@@ -29,9 +29,9 @@ const config = {
     DEBUG: process.env.DEBUG,
 
     // LiteLLM Proxy Configuration
-    LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL, 'http://localhost:4000'),
+    LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL),
     LITELLM_MASTER_KEY: cleanEnvVar(process.env.LITELLM_MASTER_KEY),
-    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'ace-gpt-4o'),
+    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME),
 
     // MCP Service URLs
     RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/sse',
@@ -203,18 +203,18 @@ async function setupMongoClient(): Promise<MongoClient> {
 
 async function setupMCPClient(): Promise<MultiServerMCPClient> {
     const client = new MultiServerMCPClient({
-        RAGService: {
-            url: config.RAG_MCP_URL,
-            transport: 'sse',
-        },
+        // RAGService: {
+        //     url: config.RAG_MCP_URL,
+        //     transport: 'sse',
+        // },
         DocDBSummarizationService: {
             url: config.DOCDB_SUMMARIZATION_MCP_URL,
             transport: 'sse',
         },
-        DocumentTranslationService: {
-            url: config.DOCUMENT_TRANSLATION_MCP_URL,
-            transport: 'sse',
-        },
+        // DocumentTranslationService: {
+        //     url: config.DOCUMENT_TRANSLATION_MCP_URL,
+        //     transport: 'sse',
+        // },
     });
     console.log('Connecting to MCP servers...');
     return client;

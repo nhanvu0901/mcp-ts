@@ -28,21 +28,39 @@ CHUNK_PROMPT = """As a professional summarizer, generate a structured JSON outpu
 3. Content Integrity: Ensure the summary strictly reflects the content of the chunk without introducing external information.
 4. JSON Structure: Return the result as a JSON object with two fields: `title` and `summary`.
 
+CRITICAL: Your response must be ONLY a valid JSON object. Do not include any markdown formatting, code blocks, or additional text. Start your response with {{ and end with }}.
+
 The text chunk:
 {chunk}
-"""
 
-REFINE_PROMPT = """Divide into paragraphs. Return the output under the JSON key `summary`.
+JSON Response:"""
+
+REFINE_PROMPT = """Divide the following summary into well-structured paragraphs and return the output under the JSON key `summary`.
 
 The summary:
 {merged_summaries}
 
 Further instruction: {further_instruction}
-"""
 
-CHUNK_SYS_PROMPT = "You are a helpful AI that excels at summarization. You always return a valid JSON object with only two keys `title` and `summary`. Unless otherwise instructed, always return the output in the original language of the document."
+CRITICAL: Your response must be ONLY a valid JSON object with the key `summary`. Do not include any markdown formatting, code blocks, or additional text. Start your response with {{ and end with }}.
 
-SYS_PROMPT = "You are a helpful AI that excels at summarization. You always return a valid JSON object with only one key `summary`. Unless otherwise instructed, always return the output in the original language of the document."
+JSON Response:"""
+
+CHUNK_SYS_PROMPT = """You are a helpful AI that excels at summarization. You must respond with ONLY a valid JSON object containing exactly two keys: `title` and `summary`. 
+
+CRITICAL RULES:
+- Do not use markdown code blocks (no ```json or ```)
+- Do not include any explanatory text before or after the JSON
+- Start your response with { and end with }
+- Unless otherwise instructed, always return the output in the original language of the document"""
+
+SYS_PROMPT = """You are a helpful AI that excels at summarization. You must respond with ONLY a valid JSON object containing exactly one key: `summary`.
+
+CRITICAL RULES:
+- Do not use markdown code blocks (no ```json or ```)
+- Do not include any explanatory text before or after the JSON
+- Start your response with { and end with }
+- Unless otherwise instructed, always return the output in the original language of the document"""
 
 SYS_PROMPT_ADD = " Always return the output in {lang}."
 
