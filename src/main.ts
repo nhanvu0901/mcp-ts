@@ -30,7 +30,7 @@ const config = {
 
     // LiteLLM Proxy Configuration
     LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL, 'http://localhost:4000'),
-    LITELLM_MASTER_KEY: cleanEnvVar(process.env.LITELLM_MASTER_KEY, 'sk-1234567890abcdef'),
+    LITELLM_MASTER_KEY: cleanEnvVar(process.env.LITELLM_MASTER_KEY),
     AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'ace-gpt-4o'),
 
     // MCP Service URLs
@@ -435,12 +435,7 @@ async function startServer() {
         });
 
         if (config.NODE_ENV !== 'production') {
-            console.log(`\n🚀 Server started successfully!`);
-            console.log(`📚 API Documentation: http://${config.HOST}:${config.PORT}/docs`);
-            console.log(`🔧 LiteLLM UI: ${config.LITELLM_PROXY_URL} (if enabled)`);
-            console.log(`📊 MongoDB Admin: http://${config.HOST}:8081`);
-            console.log(`🗄️  PostgreSQL Admin: http://${config.HOST}:8082`);
-            console.log(`🔍 Qdrant Dashboard: http://${config.HOST}:6333/dashboard`);
+            console.log(`API Documentation: http://${config.HOST}:${config.PORT}/docs`);
         }
 
     } catch (error) {
