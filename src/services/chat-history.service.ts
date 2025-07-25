@@ -1,10 +1,9 @@
 import {MongoDBChatMessageHistory} from '@langchain/mongodb';
 import {HumanMessage, AIMessage, SystemMessage} from '@langchain/core/messages';
 import {MongoClient} from 'mongodb';
-import {AzureChatOpenAI} from '@langchain/openai';
-import {IChatHistoryService, ChatHistoryConfig} from '../types/chat-history.types';
-import {StoredSummary} from 'types/chat-history.types'
-
+import {IChatHistoryService, ChatHistoryConfig} from '../types/chat.history.types';
+import {StoredSummary} from '../types/chat.history.types';
+import {ChatOpenAI} from '@langchain/openai';
 
 export class ChatHistoryService implements IChatHistoryService {
     private readonly shortTermLimit: number;
@@ -13,7 +12,7 @@ export class ChatHistoryService implements IChatHistoryService {
 
     constructor(
         private mongoClient: MongoClient,
-        private model: AzureChatOpenAI,
+        private model: ChatOpenAI,
         config?: ChatHistoryConfig
     ) {
         this.shortTermLimit = config?.shortTermLimit ?? 10;
@@ -50,7 +49,6 @@ export class ChatHistoryService implements IChatHistoryService {
                 `Previous conversation summary:\n${combinedSummary}\n\n--- Current conversation continues below ---`
             ));
         } else if (olderMessagesCount < this.shortTermLimit) {
-            //For messages < shortTermLimit include the few older messages directly to avoid loss
             const unsummarizedMessages = allMessages.slice(0, olderMessagesCount);
             contextMessages.push(...unsummarizedMessages);
         }

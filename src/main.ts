@@ -5,7 +5,6 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
-import {AzureChatOpenAI} from '@langchain/openai';
 import {createReactAgent} from '@langchain/langgraph/prebuilt';
 import {MultiServerMCPClient} from '@langchain/mcp-adapters';
 import {MongoClient} from 'mongodb';
@@ -13,8 +12,9 @@ import {mkdir} from 'fs/promises';
 import api from "./routes/index";
 import dotenv from 'dotenv';
 import fp from 'fastify-plugin';
-import errorHandlerPlugin from './plugins/errorHandler.plugin'
-
+import errorHandlerPlugin from './plugins/errorHandler.plugin';
+import { setupLiteLLMModel } from './services';
+import { ChatOpenAI } from '@langchain/openai';
 
 dotenv.config();
 
@@ -30,8 +30,9 @@ const config = {
     DEBUG: process.env.DEBUG,
     AZURE_OPENAI_API_KEY: cleanEnvVar(process.env.AZURE_OPENAI_API_KEY),
     AZURE_OPENAI_ENDPOINT: cleanEnvVar(process.env.AZURE_OPENAI_ENDPOINT),
-    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'gpt-4o-mini'),
+    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'ace-gpt-4o'),
     AZURE_OPENAI_MODEL_API_VERSION: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_API_VERSION, '2024-02-15-preview'),
+    LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL, 'http://localhost:4000'),
 
     RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/sse',
     DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || 'http://localhost:8003/sse',
@@ -39,7 +40,6 @@ const config = {
 
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'),
     UPLOAD_DIR: process.env.UPLOAD_DIR || './src/python/data/uploads',
-    // MONGODB_URI: process.env.MONGODB_URI || 'mongodb://admin:admin123@mongodb:27017/ai_assistant?authSource=admin',
     MONGODB_URI: 'mongodb://admin:admin123@localhost:27017/ai_assistant?authSource=admin',
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || 'RAG',
 };
@@ -54,7 +54,7 @@ async function setupDirectories() {
 }
 
 function validateConfig() {
-    const required = ['AZURE_OPENAI_API_KEY', 'AZURE_OPENAI_ENDPOINT'];
+    const required = ['AZURE_OPENAI_API_KEY', 'LITELLM_PROXY_URL'];
     const missing = required.filter(key => !cleanEnvVar(process.env[key]));
     if (missing.length > 0) {
         throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
@@ -170,26 +170,14 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
     });
 }
 
-function setupModel(): AzureChatOpenAI {
-    if (!config.AZURE_OPENAI_ENDPOINT.startsWith('https://')) {
-        throw new Error(`Invalid Azure OpenAI endpoint format: ${config.AZURE_OPENAI_ENDPOINT}. Must start with https://`);
-    }
-
-    try {
-        new URL(config.AZURE_OPENAI_ENDPOINT);
-    } catch (error) {
-        throw new Error(`Invalid Azure OpenAI endpoint URL: ${config.AZURE_OPENAI_ENDPOINT}`);
-    }
-
-    return new AzureChatOpenAI({
-        model: config.AZURE_OPENAI_MODEL_NAME,
-        apiKey: config.AZURE_OPENAI_API_KEY,
-        azureOpenAIApiVersion: config.AZURE_OPENAI_MODEL_API_VERSION,
-        azureOpenAIEndpoint: config.AZURE_OPENAI_ENDPOINT,
-        azureOpenAIApiDeploymentName: config.AZURE_OPENAI_MODEL_NAME,
-        temperature: 0.1,
-        maxTokens: 5000,
-    });
+function setupModel(): ChatOpenAI {
+    return setupLiteLLMModel(
+        config.AZURE_OPENAI_MODEL_NAME,
+        config.AZURE_OPENAI_API_KEY,
+        config.LITELLM_PROXY_URL,
+        0.1,
+        5000
+    );
 }
 
 async function setupMongoClient(): Promise<MongoClient> {
@@ -228,7 +216,7 @@ async function setupMCPClient(): Promise<MultiServerMCPClient> {
     return client;
 }
 
-async function setupAgent(model: AzureChatOpenAI, mcpClient: MultiServerMCPClient) {
+async function setupAgent(model: ChatOpenAI, mcpClient: MultiServerMCPClient) {
     try {
         const tools = await mcpClient.getTools();
         console.log(`Loaded ${tools.length} tools from MCP servers`);
@@ -454,7 +442,7 @@ async function startServer() {
 
 declare module 'fastify' {
     interface FastifyInstance {
-        model: AzureChatOpenAI;
+        model: ChatOpenAI;
         mongoClient: MongoClient;
         mcpClient: MultiServerMCPClient;
         agent: any;
