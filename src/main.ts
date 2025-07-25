@@ -13,7 +13,6 @@ import api from "./routes/index";
 import dotenv from 'dotenv';
 import fp from 'fastify-plugin';
 import errorHandlerPlugin from './plugins/errorHandler.plugin';
-import { setupLiteLLMModel } from './services';
 import { ChatOpenAI } from '@langchain/openai';
 
 dotenv.config();
@@ -28,18 +27,21 @@ const config = {
     PORT: parseInt(process.env.PORT || '3000'),
     NODE_ENV: process.env.NODE_ENV || 'development',
     DEBUG: process.env.DEBUG,
-    AZURE_OPENAI_API_KEY: cleanEnvVar(process.env.AZURE_OPENAI_API_KEY),
-    AZURE_OPENAI_ENDPOINT: cleanEnvVar(process.env.AZURE_OPENAI_ENDPOINT),
-    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'ace-gpt-4o'),
-    AZURE_OPENAI_MODEL_API_VERSION: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_API_VERSION, '2024-02-15-preview'),
-    LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL, 'http://localhost:4000'),
 
+    // LiteLLM Proxy Configuration
+    LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL, 'http://localhost:4000'),
+    LITELLM_MASTER_KEY: cleanEnvVar(process.env.LITELLM_MASTER_KEY, 'sk-1234567890abcdef'),
+    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME, 'ace-gpt-4o'),
+
+    // MCP Service URLs
     RAG_MCP_URL: process.env.RAG_MCP_URL || 'http://localhost:8002/sse',
     DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || 'http://localhost:8003/sse',
     DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || 'http://localhost:8004/sse',
 
+    // Application Settings
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'),
     UPLOAD_DIR: process.env.UPLOAD_DIR || './src/python/data/uploads',
+    // MONGODB_URI: process.env.MONGODB_URI || 'mongodb://admin:admin123@mongodb:27017/ai_assistant?authSource=admin',
     MONGODB_URI: 'mongodb://admin:admin123@localhost:27017/ai_assistant?authSource=admin',
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || 'RAG',
 };
@@ -54,8 +56,8 @@ async function setupDirectories() {
 }
 
 function validateConfig() {
-    const required = ['AZURE_OPENAI_API_KEY', 'LITELLM_PROXY_URL'];
-    const missing = required.filter(key => !cleanEnvVar(process.env[key]));
+    const required = ['LITELLM_PROXY_URL', 'LITELLM_MASTER_KEY'];
+    const missing = required.filter(key => !process.env[key]);
     if (missing.length > 0) {
         throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
     }
@@ -81,7 +83,6 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
             bodySize: request.body ? `${Buffer.byteLength(JSON.stringify(request.body))} bytes` : '0 bytes',
             contentType: request.headers['content-type'],
             isMultipart: request.isMultipart(),
-
         }, 'REQUEST BODY DATA');
     });
 
@@ -171,13 +172,16 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
 }
 
 function setupModel(): ChatOpenAI {
-    return setupLiteLLMModel(
-        config.AZURE_OPENAI_MODEL_NAME,
-        config.AZURE_OPENAI_API_KEY,
-        config.LITELLM_PROXY_URL,
-        0.1,
-        5000
-    );
+    return new ChatOpenAI({
+        model: config.AZURE_OPENAI_MODEL_NAME,
+        apiKey: config.LITELLM_MASTER_KEY,
+        configuration: {
+            baseURL: config.LITELLM_PROXY_URL + '/v1',
+        },
+        temperature: 0.1,
+        maxTokens: 5000,
+        timeout: 30000,
+    });
 }
 
 async function setupMongoClient(): Promise<MongoClient> {
@@ -325,8 +329,8 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
                 openapi: {
                     openapi: '3.0.0',
                     info: {
-                        title: 'Fastify MCP RAG API',
-                        description: 'TypeScript/Fastify application with LangGraph and MCP integration',
+                        title: 'Fastify MCP RAG API with LiteLLM',
+                        description: 'TypeScript/Fastify application with LangGraph, MCP integration, and LiteLLM proxy',
                         version: '1.0.0',
                     },
                     servers: [
@@ -431,7 +435,12 @@ async function startServer() {
         });
 
         if (config.NODE_ENV !== 'production') {
-            console.log(`API Documentation: http://${config.HOST}:${config.PORT}/docs`);
+            console.log(`\n🚀 Server started successfully!`);
+            console.log(`📚 API Documentation: http://${config.HOST}:${config.PORT}/docs`);
+            console.log(`🔧 LiteLLM UI: ${config.LITELLM_PROXY_URL} (if enabled)`);
+            console.log(`📊 MongoDB Admin: http://${config.HOST}:8081`);
+            console.log(`🗄️  PostgreSQL Admin: http://${config.HOST}:8082`);
+            console.log(`🔍 Qdrant Dashboard: http://${config.HOST}:6333/dashboard`);
         }
 
     } catch (error) {
