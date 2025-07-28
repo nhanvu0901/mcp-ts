@@ -2,13 +2,23 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     gosu \
     supervisor \
     libreoffice \
-    && rm -rf /var/lib/apt/lists/*
+    libmagic1 \
+    catdoc \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-slk \
+    tesseract-ocr-ces \
+    poppler-utils && \
+    apt-get autoremove -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

@@ -8,6 +8,21 @@ import re
 import subprocess
 import tempfile
 
+import asyncio
+import logging
+import traceback
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Dict, Tuple
+from .ocr import (
+    convert_pdf_to_images,
+    ocr_image,
+    ocr_image_with_lang,
+    process_document,
+    remove_corrected_text_header,
+    assess_output_quality
+)
+
+
 
 def clean_document_text(text: str) -> str:
     text = re.sub(r'^\s*(INTERNAL|CONFIDENTIAL|PROPRIETARY|DRAFT)\s*\n', '', text, flags=re.IGNORECASE)
@@ -29,6 +44,200 @@ def clean_document_text(text: str) -> str:
     text = re.sub(r'\n\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\s*\n', '\n', text)
     return text
 
+async def extract_pdf_with_ocr(file_path: str, 
+                              suggested_languages: list[str] = None, 
+                              use_llm: bool = True) -> Tuple[str, List[Dict]]:
+    """
+    Extract text from PDF using OCR with page tracking information.
+    
+    Args:
+        file_path (str): Path to the PDF file
+        suggested_languages (list[str], optional): Languages for OCR (e.g., ['eng', 'vie'])
+        use_llm (bool): Whether to use LLM for text correction and formatting
+        
+    Returns:
+        Tuple[str, List[Dict]]: Extracted text and page information
+            - str: Full extracted and processed text
+            - List[Dict]: Page info with structure:
+                [{"page_number": int, "start_position": int, "end_position": int, "text_length": int}]
+    """
+    try:
+        logging.info(f"Starting OCR extraction for: {file_path}")
+        
+        # Convert PDF to images using existing function
+        list_of_scanned_images = convert_pdf_to_images(file_path, max_pages=0, skip_first_n_pages=0)
+        
+        logging.info(f"Converted {len(list_of_scanned_images)} pages to images")
+        logging.info("Extracting text from converted pages...")
+        
+        # Prepare language code for Tesseract
+        lang_code = "+".join(suggested_languages) if suggested_languages else None
+        
+        # Extract text from each page individually
+        with ThreadPoolExecutor() as executor:
+            if lang_code:
+                page_texts = list(
+                    executor.map(lambda img: ocr_image_with_lang(img, lang_code), list_of_scanned_images)
+                )
+            else:
+                page_texts = list(executor.map(ocr_image, list_of_scanned_images))
+        
+        logging.info("Text extraction from images complete")
+        
+        # Build page info and concatenate text
+        page_info = []
+        full_text = ""
+        
+        for page_num, page_text in enumerate(page_texts):
+            # Clean page text
+            cleaned_page_text = clean_document_text(page_text) if page_text.strip() else ""
+            
+            start_pos = len(full_text)
+            
+            # Add text to full_text (even if empty, to maintain page structure)
+            if cleaned_page_text:
+                full_text += cleaned_page_text
+            
+            # Add page separator between pages (not after last page)
+            if page_num < len(page_texts) - 1:
+                full_text += "\n\n"
+            
+            end_pos = len(full_text)
+            
+            # Create page info
+            page_info_entry = {
+                "page_number": page_num + 1,
+                "start_position": start_pos,
+                "end_position": end_pos,
+                "text_length": len(cleaned_page_text),
+                "ocr_extracted": True
+            }
+            
+            # Add flag for empty pages
+            if not cleaned_page_text:
+                page_info_entry["empty_page"] = True
+                
+            page_info.append(page_info_entry)
+        
+        # Store original text and page info for quality assessment
+        original_full_text = full_text
+        original_page_info = page_info.copy()
+        
+        # If LLM processing is requested, process the text
+        if use_llm and full_text.strip():
+            logging.info("Processing with LLM for correction and formatting...")
+            
+            # Use existing LLM processing pipeline
+            processed_text = await process_document(
+                page_texts,  # Pass original page texts for better processing
+                reformat_as_markdown=True,
+                suppress_headers_and_page_numbers=True
+            )
+            
+            if processed_text and processed_text.strip():
+                processed_text = remove_corrected_text_header(processed_text)
+                
+                # Update page info positions based on processed text
+                page_info = _recalculate_page_positions(processed_text, len(page_texts))
+                
+                # Quality assessment
+                try:
+                    quality_score, explanation = await assess_output_quality(original_full_text, processed_text)
+                    if quality_score is not None:
+                        logging.info(f"OCR Quality score: {quality_score}/100")
+                        logging.info(f"Quality explanation: {explanation}")
+                except Exception as e:
+                    logging.warning(f"Quality assessment failed: {e}")
+                
+                full_text = processed_text
+            else:
+                logging.warning("LLM processing returned empty result, using raw OCR text")
+                page_info = original_page_info  # Restore original page info
+        
+        # Final cleaning
+        full_text = clean_document_text(full_text)
+        
+        logging.info(f"OCR extraction complete. Total pages: {len(page_info)}, Text length: {len(full_text)}")
+        
+        return full_text, page_info
+        
+    except Exception as e:
+        logging.error(f"Error in extract_pdf_with_ocr: {e}")
+        logging.error(traceback.format_exc())
+        raise
+
+
+def _recalculate_page_positions(processed_text: str, num_pages: int) -> List[Dict]:
+    """
+    Recalculate page positions after LLM processing.
+    Since LLM can change text structure, we estimate page boundaries.
+    """
+    page_info = []
+    text_length = len(processed_text)
+    
+    if num_pages <= 0:
+        return page_info
+        
+    chars_per_page = text_length // num_pages
+    
+    for page_num in range(num_pages):
+        start_pos = page_num * chars_per_page
+        end_pos = min((page_num + 1) * chars_per_page, text_length)
+        
+        # For the last page, make sure we capture all remaining text
+        if page_num == num_pages - 1:
+            end_pos = text_length
+        
+        page_info.append({
+            "page_number": page_num + 1,
+            "start_position": start_pos,
+            "end_position": end_pos,
+            "text_length": end_pos - start_pos,
+            "ocr_extracted": True,
+            "estimated_after_llm": True
+        })
+    
+    return page_info
+
+
+def extract_text_with_ocr(file_path: str, 
+                          suggested_languages: list[str] = None,
+                          use_llm: bool = True) -> Tuple[str, List[Dict]]:
+    """
+    Extract text with OCR support for PDF files.
+    This is a sync wrapper around the async OCR function.
+    
+    Args:
+        file_path (str): Path to the file  
+        suggested_languages (list[str], optional): Languages for OCR
+        use_llm (bool): Whether to use LLM for text correction (only for OCR)
+    """
+    file_type = file_path.split('.')[-1].lower()
+
+    if file_type == 'pdf':
+        # Always use OCR for PDF in this function
+        try:
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(
+                extract_pdf_with_ocr(file_path, suggested_languages, use_llm)
+            )
+        except RuntimeError:
+            # No event loop running, create one
+            return asyncio.run(
+                extract_pdf_with_ocr(file_path, suggested_languages, use_llm)
+            )
+    else:
+        # For non-PDF files, fall back to regular extraction
+        text = extract_text(file_path)
+        text = clean_document_text(text)
+        page_info = [{
+            "page_number": 1,
+            "start_position": 0,
+            "end_position": len(text),
+            "estimated": False,
+            "ocr_extracted": False
+        }]
+        return text, page_info
 
 def extract_pdf_with_pages(file_path: str) -> Tuple[str, List[Dict]]:
     markdown_text = pymupdf4llm.to_markdown(file_path)

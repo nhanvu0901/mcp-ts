@@ -30,3 +30,12 @@ export interface ExtractedContent {
     aiResponse: string;
     ragResponse: string | null;
 }
+
+
+export interface AgentToolInput {
+    query: string;
+    user_id: string;
+    collection_id: string[];
+    doc_id?: string;
+    has_document_context?: boolean;
+}

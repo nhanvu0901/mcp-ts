@@ -4,7 +4,8 @@ from .mongo_service import MongoService
 from .qdrant_service import QdrantService
 from .text_splitter import TextSplitter
 from .config import ChunkingMethod, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
-from .utils import extract_text, extract_text_with_pages, clean_document_text
+# ADD: Import OCR function
+from .utils import extract_text, extract_text_with_pages, extract_text_with_ocr, clean_document_text
 from .config import DEFAULT_QDRANT_HOST
 
 
@@ -163,6 +164,100 @@ class DocumentProcessor:
             print(f"[DocumentProcessor] Saving to MongoDB only with metadata: {meta}")
 
             return self.mongo_service.save_document(document_id, text, user_id, meta)
+
+    # ADD: New method for OCR processing
+    def process_file_with_ocr(self, file_path: str, document_id: str, user_id: str,
+                             document_name: str = None, file_type: str = None,
+                             embed: bool = False, metadata: dict = None,
+                             suggested_languages: list[str] = None,
+                             use_llm: bool = True, **kwargs):
+        """
+        Process file using OCR extraction method.
+        
+        Args:
+            file_path (str): Path to the file
+            document_id (str): Unique document identifier
+            user_id (str): User identifier
+            document_name (str, optional): Name of the document
+            file_type (str, optional): Type of the file
+            embed (bool): Whether to create embeddings
+            metadata (dict, optional): Additional metadata
+            suggested_languages (list[str], optional): Languages for OCR (e.g., ['eng', 'vie'])
+            use_llm (bool): Whether to use LLM for text correction
+            **kwargs: Additional arguments for chunking
+        """
+        if embed:
+            try:
+                # Use OCR extraction with page info
+                text, page_info = extract_text_with_ocr(
+                    file_path, 
+                    suggested_languages=suggested_languages,
+                    use_llm=use_llm
+                )
+                
+                # ADD: Mark metadata to indicate OCR was used
+                ocr_metadata = metadata or {}
+                ocr_metadata.update({
+                    "extraction_method": "ocr",
+                    "ocr_languages": suggested_languages or ["eng"],
+                    "llm_enhanced": use_llm
+                })
+                
+                return self.process_and_embed(
+                    text=text,
+                    document_id=document_id,
+                    user_id=user_id,
+                    document_name=document_name,
+                    file_type=file_type,
+                    metadata=ocr_metadata,
+                    page_info=page_info,
+                    **kwargs
+                )
+            except Exception as e:
+                print(f"Error processing with OCR: {e}, falling back to regular extraction")
+                # Fallback to regular processing
+                return self.process_file(
+                    file_path=file_path,
+                    document_id=document_id,
+                    user_id=user_id,
+                    document_name=document_name,
+                    file_type=file_type,
+                    embed=embed,
+                    metadata=metadata,
+                    **kwargs
+                )
+        else:
+            # For non-embedding case, use OCR for text extraction only
+            if not self.mongo_service:
+                raise ValueError("MongoDB service not initialized")
+
+            try:
+                # Extract text using OCR
+                text, _ = extract_text_with_ocr(
+                    file_path,
+                    suggested_languages=suggested_languages,
+                    use_llm=use_llm
+                )
+                
+                # ADD: Mark metadata to indicate OCR was used
+                meta = metadata or {}
+                meta.update({
+                    "document_name": document_name,
+                    "file_type": file_type,
+                    "extraction_method": "ocr",
+                    "ocr_languages": suggested_languages or ["eng"],
+                    "llm_enhanced": use_llm
+                })
+
+                print(f"[DocumentProcessor] Saving OCR text to MongoDB with metadata: {meta}")
+                return self.mongo_service.save_document(document_id, text, user_id, meta)
+                
+            except Exception as e:
+                print(f"Error with OCR extraction: {e}, falling back to regular extraction")
+                # Fallback to regular method
+                return self.extract_and_save_to_mongo(
+                    file_path, document_id, user_id, document_name, file_type, metadata
+                )
 
     def delete_document(self, document_id: str, user_id: str) -> bool:
         mongo_success = True

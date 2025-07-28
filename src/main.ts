@@ -42,7 +42,7 @@ const config = {
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'),
     UPLOAD_DIR: process.env.UPLOAD_DIR || './src/python/data/uploads',
     // MONGODB_URI: process.env.MONGODB_URI || 'mongodb://admin:admin123@mongodb:27017/ai_assistant?authSource=admin',
-    MONGODB_URI: 'mongodb://admin:admin123@localhost:27017/ai_assistant?authSource=admin',
+    MONGODB_URI: 'mongodb://root:rootPass@localhost:27017/ai_assistant?authSource=admin',
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || 'RAG',
 };
 
@@ -203,18 +203,18 @@ async function setupMongoClient(): Promise<MongoClient> {
 
 async function setupMCPClient(): Promise<MultiServerMCPClient> {
     const client = new MultiServerMCPClient({
-        // RAGService: {
-        //     url: config.RAG_MCP_URL,
-        //     transport: 'sse',
-        // },
+        RAGService: {
+            url: config.RAG_MCP_URL,
+            transport: 'sse',
+        },
         DocDBSummarizationService: {
             url: config.DOCDB_SUMMARIZATION_MCP_URL,
             transport: 'sse',
         },
-        // DocumentTranslationService: {
-        //     url: config.DOCUMENT_TRANSLATION_MCP_URL,
-        //     transport: 'sse',
-        // },
+        DocumentTranslationService: {
+            url: config.DOCUMENT_TRANSLATION_MCP_URL,
+            transport: 'sse',
+        },
     });
     console.log('Connecting to MCP servers...');
     return client;
@@ -226,6 +226,18 @@ async function setupAgent(model: ChatOpenAI, mcpClient: MultiServerMCPClient) {
         console.log(`Loaded ${tools.length} tools from MCP servers`);
 
         const agentPrompt = `You are an AI assistant with access to RAGService (document search), DocDBSummarizationService (document summarization), and DocumentTranslationService (document translation). **Always check conversation history context FIRST before using external services.**
+
+**CRITICAL: Document Context Detection**
+Look for "Has Document Context: true/false" in the user message to determine how to respond:
+
+**When "Has Document Context: false":**
+- DO NOT use any document-related tools (RAGService, DocDBSummarizationService, DocumentTranslationService)
+- Respond as a helpful general-purpose AI assistant using your knowledge
+- Answer questions directly without attempting document searches
+- Be conversational and helpful based on your training data
+
+**When "Has Document Context: true":**
+Use the document tools as described below:
 
 **Query Types:**
 1. **Document-Specific**: Messages containing "Document ID:" target a specific document
@@ -256,15 +268,19 @@ When using DocumentTranslationService:
 - Include the full translation content for the user to read
 - Format the translation clearly and readably
 
-**Citation Rules:**
+**Citation Rules (Only when using document tools):**
 RAGService returns text with "SOURCE_CITATION: \\cite{document_name, page/chunk number}". You MUST:
 1. Preserve exact "SOURCE_CITATION:" prefix format
 2. Place citations immediately after supported claims
 3. DO NOT group citations at end
 4. Each claim needs its citation right after
 
-**Example:**
+**Example with Citations:**
 Simple reflex agents act based on current percepts. SOURCE_CITATION: \\cite{ai agent.pdf, page 1} Model-based agents maintain internal state. SOURCE_CITATION: \\cite{ai agent.pdf, page 2}
+
+**Example without Document Context:**
+When Has Document Context is false, respond naturally:
+"I'd be happy to help you with that question! Based on my knowledge, [provide helpful response]. Is there anything specific you'd like me to explain further?"
 
 **Always prioritize conversation history over external services for personal user information.**`;
 

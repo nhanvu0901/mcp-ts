@@ -41,6 +41,10 @@ class DocumentSearch(BaseModel):
     user_id: str
     collection_id: Optional[str] = None
 
+class DocumentOCRUpload(BaseModel):
+    suggested_languages: Optional[List[str]] = ["eng"]
+    use_llm: bool = True
+
 
 @app.get("/documents/references")
 async def get_document_references(user_id: str):
@@ -284,6 +288,139 @@ async def upload_document(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/documents/ocr")
+async def upload_document_ocr(
+        file: UploadFile = File(...),
+        user_id: str = Form(...),
+        collection_id: Optional[str] = Form(None),
+        embed: bool = Form(False),
+        # ADD: OCR-specific parameters
+        suggested_languages: Optional[str] = Form("eng"),  # Comma-separated string
+        use_llm: bool = Form(True)
+):
+    """
+    Upload and process document using OCR extraction.
+    
+    Args:
+        file: The uploaded file
+        user_id: User identifier
+        collection_id: Optional collection identifier
+        embed: Whether to create embeddings
+        suggested_languages: Comma-separated OCR languages (e.g., "eng,vie")
+        use_llm: Whether to use LLM for text correction and formatting
+    """
+    document_id = str(uuid.uuid4())
+    temp_file_path = None
+
+    try:
+        print(f"=== UPLOAD DOCUMENT WITH OCR ===")
+        print(f"File: {file.filename}")
+        print(f"User ID: {user_id}")
+        print(f"Collection ID: {collection_id}")
+        print(f"Embed: {embed}")
+        print(f"OCR Languages: {suggested_languages}")
+        print(f"Use LLM: {use_llm}")
+        print(f"Document ID: {document_id}")
+
+        # ADD: Parse languages string to list
+        language_list = [lang.strip() for lang in suggested_languages.split(",")] if suggested_languages else ["eng"]
+        print(f"Parsed languages: {language_list}")
+
+        normalized_filename = mongo_service.normalize_document_name(file.filename)
+
+        if mongo_service.check_document_name_exists(user_id, collection_id, normalized_filename):
+            raise HTTPException(
+                status_code=409,
+                detail=f"A document with the name '{file.filename}' already exists in this collection"
+            )
+
+        qdrant_collection_name = "default"
+
+        if collection_id:
+            collection_doc = mongo_service.get_collection(collection_id, user_id)
+            print(f"Collection doc found: {collection_doc}")
+
+            if collection_doc:
+                qdrant_collection_name = collection_id
+                print(f"Using Qdrant collection: {qdrant_collection_name}")
+            else:
+                raise HTTPException(status_code=403, detail="Collection not found or not authorized")
+
+        file_extension = file.filename.split('.')[-1].lower()
+
+        # ADD: Check if file type supports OCR
+        if file_extension not in ['pdf']:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"OCR is currently only supported for PDF files. File type: {file_extension}"
+            )
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp_file:
+            temp_file_path = tmp_file.name
+            content = await file.read()
+            tmp_file.write(content)
+
+        print(f"Temp file created: {temp_file_path}")
+        print(f"File size: {len(content)} bytes")
+
+        if embed and not embedding_model:
+            raise HTTPException(status_code=500, detail="Embedding model not configured")
+
+        processor = DocumentProcessor(
+            collection_name=qdrant_collection_name,
+            embedding_model=embedding_model,
+            mongo_client=mongo_client
+        )
+
+        print(f"Processing file with OCR - embed={embed}, languages={language_list}, use_llm={use_llm}")
+
+        # ADD: Use the new OCR processing method
+        success = processor.process_file_with_ocr(
+            file_path=temp_file_path,
+            document_id=document_id,
+            user_id=user_id,
+            document_name=file.filename,
+            file_type=file_extension,
+            embed=embed,
+            metadata={
+                "collection_id": collection_id
+            },
+            suggested_languages=language_list,
+            use_llm=use_llm
+        )
+
+        print(f"OCR process file result: {success}")
+
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
+        if success:
+            print(f"Document uploaded with OCR successfully: {document_id}")
+            return {
+                "document_id": document_id,
+                "document_name": file.filename,
+                "normalized_name": normalized_filename,
+                "file_type": file_extension,
+                "collection_id": collection_id,
+                "extraction_method": "ocr",
+                "ocr_languages": language_list,
+                "llm_enhanced": use_llm,
+                "status": "uploaded"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to process document with OCR")
+
+    except HTTPException:
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise
+    except Exception as e:
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        print(f"Error uploading document with OCR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
 
 @app.get("/documents/{document_id}")
 async def get_document_info(document_id: str):
