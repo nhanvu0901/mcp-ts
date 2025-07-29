@@ -46,8 +46,23 @@ class DocumentOCRUpload(BaseModel):
     use_llm: bool = True
 
 
-@app.get("/documents/references")
+@app.get("/documents/last-30-days")
 async def get_document_references(user_id: str):
+    """
+        Get recent document metadata for a user.
+
+        Returns document metadata (not full content) for documents uploaded
+        in the last 30 days. Intended for syncing and recent activity displays.
+
+        Args:
+            user_id (str): User identifier to filter documents
+
+        Returns:
+            dict: Response containing:
+                - documents: List of document metadata objects
+                - total_count: Number of documents found
+                - sync_timestamp: ISO timestamp of when data was retrieved
+        """
     try:
         print(f"=== GET DOCUMENT REFERENCES (30 DAYS) ===")
         print(f"User ID: {user_id}")

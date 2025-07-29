@@ -15,13 +15,22 @@ RUN apt-get update && \
     tesseract-ocr-eng \
     tesseract-ocr-slk \
     tesseract-ocr-ces \
-    poppler-utils && \
+    poppler-utils \
+    #OPENCV/OpenGL SUPPORT:
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=100 --retries 3 -r requirements.txt || \
+    (echo "First attempt failed, trying with --force-reinstall" && \
+     pip install --no-cache-dir --force-reinstall --default-timeout=100 -r requirements.txt)
 
 COPY . .
 

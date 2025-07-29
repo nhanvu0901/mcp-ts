@@ -6,14 +6,14 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 _CLIENT = AsyncAzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version=os.getenv("AZURE_OPENAI_MODEL_VERSION"),
+    api_version=os.getenv("AZURE_OPENAI_MODEL_API_VERSION"),  # Fixed: was AZURE_OPENAI_MODEL_VERSION
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
 )
 _MODEL_NAME = os.environ.get("AZURE_OPENAI_MODEL_NAME")
 
 _MINI_CLIENT = AsyncAzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version=os.getenv("AZURE_OPENAI_MODEL_VERSION"),
+    api_version=os.getenv("AZURE_OPENAI_MODEL_API_VERSION"),  # Fixed: was AZURE_OPENAI_MODEL_VERSION
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
 )
 _MINI_MODEL_NAME = os.environ.get("AZURE_OPENAI_MODEL_NAME")

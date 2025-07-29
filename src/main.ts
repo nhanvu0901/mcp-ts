@@ -42,7 +42,7 @@ const config = {
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'),
     UPLOAD_DIR: process.env.UPLOAD_DIR || './src/python/data/uploads',
     // MONGODB_URI: process.env.MONGODB_URI || 'mongodb://admin:admin123@mongodb:27017/ai_assistant?authSource=admin',
-    MONGODB_URI: 'mongodb://root:rootPass@localhost:27017/ai_assistant?authSource=admin',
+    MONGODB_URI: 'mongodb://admin:admin123@localhost:27017/ai_assistant?authSource=admin',
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || 'RAG',
 };
 
@@ -345,7 +345,7 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
                 openapi: {
                     openapi: '3.0.0',
                     info: {
-                        title: 'Fastify MCP RAG API with LiteLLM',
+                        title: 'Fastify MCP',
                         description: 'TypeScript/Fastify application with LangGraph, MCP integration, and LiteLLM proxy',
                         version: '1.0.0',
                     },
