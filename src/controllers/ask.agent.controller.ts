@@ -179,7 +179,7 @@ export class AskAgentController {
             }
         } catch (error) {
             console.warn('Failed to check document existence via MongoDB, assuming documents exist:', error);
-            return true;
+            return false;
         }
     }
 

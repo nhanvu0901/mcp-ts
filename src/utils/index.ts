@@ -1,1 +1,1 @@
-export { AgentUtils, SourceReference } from './agent.utils';
+export { AgentUtils } from './agent.utils';
