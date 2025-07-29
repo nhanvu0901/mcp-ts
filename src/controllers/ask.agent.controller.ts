@@ -29,7 +29,6 @@ export class AskAgentController {
                 // Use existing validation for query-based requests
                 AgentUtils.validateRequest(query, userId, collectionId);
             }
-
             let queryType: 'document_specific' | 'general' | 'intent_based';
             let intentType: string | undefined;
             let aiResponse: string;

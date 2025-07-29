@@ -40,6 +40,22 @@ class DocumentSearch(BaseModel):
     query: str
     user_id: str
     collection_id: Optional[str] = None
+    search_type: Optional[str] = "hybrid"  # "hybrid", "dense", or "sparse"
+    dense_weight: Optional[float] = 0.6
+    limit: Optional[int] = 10
+
+
+class DocumentQuery(BaseModel):
+    query: str
+    user_id: str
+    collection_id: Optional[str] = None
+    search_type: Optional[str] = "hybrid"  # "hybrid", "dense", "sparse", or "semantic"
+    dense_weight: Optional[float] = 0.6
+    limit: Optional[int] = 10
+    filters: Optional[dict] = None  # Additional metadata filters
+    include_metadata: Optional[bool] = True
+    include_text: Optional[bool] = True
+    min_score: Optional[float] = 0.0  # Minimum similarity score threshold
 
 class DocumentOCRUpload(BaseModel):
     suggested_languages: Optional[List[str]] = ["eng"]
@@ -99,21 +115,44 @@ async def create_collection(collection: CollectionCreate):
     collection_id = str(uuid.uuid4())
 
     try:
-        print(f"Creating collection: {collection.name} for user: {collection.user_id}")
+        print(f"Creating hybrid collection: {collection.name} for user: {collection.user_id}")
         print(f"Generated collection_id: {collection_id}")
 
         try:
+            from qdrant_client.models import (
+                VectorParams, Distance, 
+                SparseVectorParams, SparseIndexParams,
+                BinaryQuantization, BinaryQuantizationConfig,
+                OptimizersConfigDiff
+            )
+            
             qdrant_client = QdrantClient(host=qdrant_host, port=6333)
 
             if not qdrant_client.collection_exists(collection_id):
+                # Create hybrid collection with both dense and sparse vectors
                 qdrant_client.create_collection(
                     collection_name=collection_id,
                     vectors_config={
-                        "size": 3072,
-                        "distance": "Cosine"
-                    }
+                        "text_dense": VectorParams(
+                            size=3072,  # Azure OpenAI text-embedding-3-large
+                            distance=Distance.COSINE,
+                            on_disk=True
+                        )
+                    },
+                    sparse_vectors_config={
+                        "text_sparse": SparseVectorParams(
+                            index=SparseIndexParams(on_disk=False)
+                        )
+                    },
+                    # Performance optimizations
+                    quantization_config=BinaryQuantization(
+                        binary=BinaryQuantizationConfig(always_ram=True)
+                    ),
+                    optimizers_config=OptimizersConfigDiff(
+                        max_segment_size=5_000_000
+                    )
                 )
-                print(f"Created Qdrant collection: {collection_id}")
+                print(f"✅ Created hybrid Qdrant collection: {collection_id}")
             else:
                 print(f"Qdrant collection already exists: {collection_id}")
 
@@ -121,11 +160,18 @@ async def create_collection(collection: CollectionCreate):
             print(f"Qdrant error: {qdrant_error}")
             raise HTTPException(status_code=500, detail=f"Failed to create Qdrant collection: {str(qdrant_error)}")
 
+        # Save to MongoDB with hybrid metadata
         success = mongo_service.save_collection(
             collection_id=collection_id,
             name=collection.name,
             user_id=collection.user_id,
-            metadata={"created_at": uuid.uuid4().hex}
+            metadata={
+                "created_at": uuid.uuid4().hex,
+                "vector_config": "hybrid",
+                "dense_size": 3072,
+                "sparse_enabled": True,
+                "embedding_model": "text-embedding-3-large"
+            }
         )
 
         print(f"MongoDB save result: {success}")
@@ -134,9 +180,16 @@ async def create_collection(collection: CollectionCreate):
             return {
                 "collection_id": collection_id,
                 "name": collection.name,
-                "status": "created"
+                "status": "created",
+                "type": "hybrid",
+                "features": {
+                    "dense_search": True,
+                    "sparse_search": True,
+                    "hybrid_ranking": True
+                }
             }
         else:
+            # Rollback: Delete Qdrant collection if MongoDB save failed
             try:
                 qdrant_client.delete_collection(collection_id)
                 print(f"Rollback: Deleted Qdrant collection {collection_id}")
@@ -147,10 +200,10 @@ async def create_collection(collection: CollectionCreate):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error creating collection: {str(e)}")
+        print(f"Error creating hybrid collection: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to create collection: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create hybrid collection: {str(e)}")
 
 
 @app.delete("/collections/{collection_id}")
@@ -256,7 +309,8 @@ async def upload_document(
         processor = DocumentProcessor(
             collection_name=qdrant_collection_name,
             embedding_model=embedding_model,
-            mongo_client=mongo_client
+            mongo_client=mongo_client,
+            enable_hybrid=True  # Enable hybrid search by default
         )
 
         print(f"Processing file with embed={embed}")
@@ -497,6 +551,146 @@ async def list_documents(user_id: str, collection_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/documents/query")
+async def query_documents(query: DocumentQuery):
+    """
+    Advanced document query endpoint with flexible search options and filtering
+    """
+    try:
+        if not query.query.strip():
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+        print(f"=== DOCUMENT QUERY ===")
+        print(f"Query: {query.query}")
+        print(f"User ID: {query.user_id}")
+        print(f"Collection ID: {query.collection_id}")
+        print(f"Search Type: {query.search_type}")
+        print(f"Dense Weight: {query.dense_weight}")
+        print(f"Limit: {query.limit}")
+        print(f"Filters: {query.filters}")
+
+        qdrant_collection_name = "default"
+
+        if query.collection_id:
+            collection_doc = mongo_service.get_collection(query.collection_id, query.user_id)
+
+            if collection_doc:
+                qdrant_collection_name = query.collection_id
+            else:
+                raise HTTPException(status_code=403, detail="Collection not found or not authorized")
+
+        processor = DocumentProcessor(
+            collection_name=qdrant_collection_name,
+            embedding_model=embedding_model,
+            mongo_client=mongo_client,
+            enable_hybrid=True
+        )
+
+        # Determine search method based on search_type
+        if query.search_type == "dense" or query.search_type == "semantic":
+            search_results = processor.dense_search(
+                query=query.query,
+                user_id=query.user_id,
+                collection_id=query.collection_id,
+                limit=query.limit
+            )
+        elif query.search_type == "hybrid":
+            search_results = processor.hybrid_search(
+                query=query.query,
+                user_id=query.user_id,
+                collection_id=query.collection_id,
+                limit=query.limit,
+                dense_weight=query.dense_weight
+            )
+        else:
+            # Default to hybrid search
+            search_results = processor.search_documents(
+                query=query.query,
+                user_id=query.user_id,
+                collection_id=query.collection_id,
+                limit=query.limit,
+                dense_weight=query.dense_weight
+            )
+
+        # Apply score threshold filtering
+        if query.min_score > 0:
+            search_results = [hit for hit in search_results if hit.score >= query.min_score]
+
+        results = []
+        for hit in search_results:
+            document_name = hit.payload.get("document_name", "Unknown Document")
+            page_number = hit.payload.get("page_number", 1)
+            chunk_id = hit.payload.get("chunk_id")
+            file_type = hit.payload.get("file_type", "").lower()
+
+            # Use page number for PDF and DOC/DOCX files, chunk_id for others
+            if file_type in ['pdf', 'doc', 'docx']:
+                citation = f"\\cite{{{document_name}, page {page_number}}}"
+                reference_type = "page"
+            else:
+                citation = f"\\cite{{{document_name}, chunk {chunk_id}}}"
+                reference_type = "chunk"
+
+            result_item = {
+                "document_id": hit.payload.get("document_id"),
+                "document_name": document_name,
+                "page_number": page_number if file_type in ['pdf', 'doc', 'docx'] else None,
+                "chunk_id": chunk_id,
+                "score": hit.score,
+                "citation": citation,
+                "reference_type": reference_type
+            }
+
+            # Include text if requested
+            if query.include_text:
+                result_item["text"] = hit.payload.get("text")
+
+            # Include metadata if requested
+            if query.include_metadata:
+                metadata = {k: v for k, v in hit.payload.items() 
+                           if k not in ["text", "document_id", "document_name", "page_number", "chunk_id", "user_id"]}
+                result_item["metadata"] = metadata
+
+            # Apply additional filters if provided
+            if query.filters:
+                should_include = True
+                for filter_key, filter_value in query.filters.items():
+                    if filter_key in hit.payload:
+                        if isinstance(filter_value, list):
+                            if hit.payload[filter_key] not in filter_value:
+                                should_include = False
+                                break
+                        else:
+                            if hit.payload[filter_key] != filter_value:
+                                should_include = False
+                                break
+                
+                if should_include:
+                    results.append(result_item)
+            else:
+                results.append(result_item)
+
+        # Sort by score (highest first)
+        results.sort(key=lambda x: x["score"], reverse=True)
+
+        return {
+            "results": results,
+            "total_found": len(results),
+            "query": query.query,
+            "search_type": query.search_type,
+            "dense_weight": query.dense_weight if query.search_type == "hybrid" else None,
+            "filters_applied": query.filters,
+            "min_score": query.min_score,
+            "collection_id": query.collection_id
+        }
+
+    except Exception as e:
+        print(f"Error in query_documents: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/documents/search")
 async def search_documents(search: DocumentSearch):
     try:
@@ -516,14 +710,35 @@ async def search_documents(search: DocumentSearch):
         processor = DocumentProcessor(
             collection_name=qdrant_collection_name,
             embedding_model=embedding_model,
-            mongo_client=mongo_client
+            mongo_client=mongo_client,
+            enable_hybrid=True  # Enable hybrid search by default
         )
 
-        search_results = processor.search_documents(
-            query=search.query,
-            user_id=search.user_id,
-            collection_id=search.collection_id
-        )
+        # Determine search method based on search_type
+        if search.search_type == "dense":
+            search_results = processor.dense_search(
+                query=search.query,
+                user_id=search.user_id,
+                collection_id=search.collection_id,
+                limit=search.limit
+            )
+        elif search.search_type == "hybrid":
+            search_results = processor.hybrid_search(
+                query=search.query,
+                user_id=search.user_id,
+                collection_id=search.collection_id,
+                limit=search.limit,
+                dense_weight=search.dense_weight
+            )
+        else:
+            # Default to hybrid search
+            search_results = processor.search_documents(
+                query=search.query,
+                user_id=search.user_id,
+                collection_id=search.collection_id,
+                limit=search.limit,
+                dense_weight=search.dense_weight
+            )
 
         results = []
         for hit in search_results:
@@ -555,7 +770,9 @@ async def search_documents(search: DocumentSearch):
         return {
             "results": results,
             "total_found": len(results),
-            "query": search.query
+            "query": search.query,
+            "search_type": search.search_type,
+            "dense_weight": search.dense_weight if search.search_type == "hybrid" else None
         }
 
     except Exception as e:
@@ -585,7 +802,8 @@ async def delete_document(document_id: str, user_id: str):
         processor = DocumentProcessor(
             collection_name=qdrant_collection_name,
             embedding_model=embedding_model,
-            mongo_client=mongo_client
+            mongo_client=mongo_client,
+            enable_hybrid=True  # Enable hybrid search by default
         )
 
         success = processor.delete_document(document_id, user_id)

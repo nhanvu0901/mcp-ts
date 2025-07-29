@@ -16,15 +16,18 @@ class DocumentProcessor:
                  mongo_client: MongoClient = None,
                  qdrant_host: str = DEFAULT_QDRANT_HOST,
                  qdrant_port: int = 6333,
-                 vector_size: int = 3072):
+                 vector_size: int = 3072,
+                 enable_hybrid: bool = True):
 
         if not embedding_model:
             raise ValueError("embedding_model must be provided")
 
         self.embedding_model = embedding_model
         self.mongo_service = MongoService(mongo_client) if mongo_client else None
-        self.qdrant_service = QdrantService(collection_name, qdrant_host, qdrant_port, vector_size)
+        self.qdrant_service = QdrantService(collection_name, qdrant_host, qdrant_port, vector_size, enable_hybrid)
         self.text_splitter = TextSplitter()
+        self.enable_hybrid = enable_hybrid
+        self.tfidf_vectorizer = None
 
         print("DocumentProcessor initialized successfully!")
 
@@ -268,10 +271,80 @@ class DocumentProcessor:
         qdrant_success = self.qdrant_service.delete_document_chunks(document_id, user_id)
         return mongo_success and qdrant_success
 
-    def search_documents(self, query: str, user_id: str, collection_id: str = None, limit: int = 10):
+    def _get_sparse_query_vector(self, query: str):
+        """Generate sparse vector for query using TF-IDF"""
+        if not self.enable_hybrid or not self.qdrant_service.tfidf_vectorizer:
+            return None
+        
+        try:
+            # Use the same TF-IDF vectorizer from QdrantService
+            tfidf_vector = self.qdrant_service.tfidf_vectorizer.transform([query])
+            from scipy.sparse import csr_matrix
+            from qdrant_client.models import SparseVector
+            
+            csr_vector = csr_matrix(tfidf_vector)
+            
+            indices = []
+            values = []
+            for i, j in zip(*csr_vector.nonzero()):
+                indices.append(j)
+                values.append(float(csr_vector[i, j]))
+                
+            return SparseVector(indices=indices, values=values)
+        except Exception as e:
+            print(f"Error generating sparse query vector: {e}")
+            return None
+
+    def search_documents(self, query: str, user_id: str, collection_id: str = None, limit: int = 10, dense_weight: float = 0.6):
+        """Legacy search method - now uses hybrid search by default"""
         try:
             query_embedding = self.embedding_model.embed_query(query)
-            return self.qdrant_service.search_documents(query_embedding, user_id, collection_id, limit)
+            
+            if self.enable_hybrid:
+                # Use hybrid search
+                query_sparse = self._get_sparse_query_vector(query)
+                return self.qdrant_service.hybrid_search(
+                    query_dense=query_embedding,
+                    user_id=user_id,
+                    query_sparse=query_sparse,
+                    collection_id=collection_id,
+                    limit=limit,
+                    dense_weight=dense_weight
+                )
+            else:
+                # Fall back to dense-only search
+                return self.qdrant_service.search_documents(
+                    query_embedding, user_id, collection_id, limit, dense_weight
+                )
         except Exception as e:
             print(f"Error in search_documents: {e}")
+            return []
+
+    def hybrid_search(self, query: str, user_id: str, collection_id: str = None, limit: int = 10, dense_weight: float = 0.6):
+        """Explicit hybrid search method combining dense and sparse vectors"""
+        try:
+            query_embedding = self.embedding_model.embed_query(query)
+            query_sparse = self._get_sparse_query_vector(query)
+            
+            return self.qdrant_service.hybrid_search(
+                query_dense=query_embedding,
+                user_id=user_id,
+                query_sparse=query_sparse,
+                collection_id=collection_id,
+                limit=limit,
+                dense_weight=dense_weight
+            )
+        except Exception as e:
+            print(f"Error in hybrid_search: {e}")
+            return []
+
+    def dense_search(self, query: str, user_id: str, collection_id: str = None, limit: int = 10):
+        """Dense-only search for semantic similarity"""
+        try:
+            query_embedding = self.embedding_model.embed_query(query)
+            return self.qdrant_service.search_documents(
+                query_embedding, user_id, collection_id, limit
+            )
+        except Exception as e:
+            print(f"Error in dense_search: {e}")
             return []

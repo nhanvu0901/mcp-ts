@@ -100,25 +100,71 @@ export class AgentUtils {
         documentName: string,
         refType: 'page' | 'chunk',
         refNumber: number
-    ): { text: string} | null {
-        const lines = ragResponse.split('\n\n');
+    ): { text: string } | null {
+        const citationPattern = /SOURCE_CITATION:\s*\\cite\{([^,]+),\s*(page|chunk)\s*([\d\-]+)\}/g;
+        const citations: Array<{
+            match: RegExpMatchArray;
+            index: number;
+            documentName: string;
+            refType: 'page' | 'chunk';
+            refNumbers: number[];
+        }> = [];
 
-        for (const line of lines) {
-            const citationMatch = line.match(/SOURCE_CITATION:\s*\\cite\{([^,]+),\s*(page|chunk)\s*([\d\-]+)\}/);
-            if (citationMatch) {
-                const lineDoctName = citationMatch[1].trim();
-                const lineRefType = citationMatch[2] as 'page' | 'chunk';
-                const lineRefValue = citationMatch[3].trim();
+        let match;
+        while ((match = citationPattern.exec(ragResponse)) !== null) {
+            const docName = match[1].trim();
+            const type = match[2] as 'page' | 'chunk';
+            const refValue = match[3].trim();
+            const numbers = this.parseNumberRange(refValue);
 
-                if (lineDoctName === documentName && lineRefType === refType) {
-                    const lineNumbers = this.parseNumberRange(lineRefValue);
+            citations.push({
+                match,
+                index: match.index,
+                documentName: docName,
+                refType: type,
+                refNumbers: numbers
+            });
+        }
 
-                    if (lineNumbers.includes(refNumber)) {
-                        const text = line.replace(/SOURCE_CITATION:.*$/, '').trim();
-                        return {text};
-                    }
-                }
-            }
+        const targetCitation = citations.find(citation =>
+            citation.documentName === documentName &&
+            citation.refType === refType &&
+            citation.refNumbers.includes(refNumber)
+        );
+
+        if (!targetCitation) {
+            return null;
+        }
+
+        // Determine the text segment that belongs to this citation
+        let textStart = 0;
+        let textEnd = targetCitation.index;
+
+        // Find the previous citation to determine where our text starts
+        const previousCitations = citations.filter(c => c.index < targetCitation.index);
+        if (previousCitations.length > 0) {
+
+            const prevCitation = previousCitations[previousCitations.length - 1];
+            textStart = prevCitation.index + prevCitation.match[0].length;
+        }
+
+        // Extract the text content between the boundaries
+        let textContent = ragResponse.substring(textStart, textEnd).trim();
+
+        textContent = textContent
+            .replace(/\n\s*\n+/g, '\n\n')
+            .replace(/[ \t]+/g, ' ')
+            .trim();
+
+        // Remove any leading/trailing whitespace from each line
+        textContent = textContent
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+            .join('\n');
+
+        if (textContent) {
+            return {text: textContent};
         }
 
         return null;
