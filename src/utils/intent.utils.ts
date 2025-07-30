@@ -163,17 +163,8 @@ export class IntentUtils {
                 if (!docId) {
                     throw new Error('Document ID is required for summarization intent');
                 }
-
-                if (intent.word_count && intent.word_count < 10) {
-                    throw new Error('Word count must be at least 10');
-                }
-
                 if (intent.level && !['concise', 'medium', 'detailed'].includes(intent.level)) {
                     throw new Error('Level must be one of: concise, medium, detailed');
-                }
-
-                if (!intent.word_count && !intent.level) {
-                    throw new Error('Either word_count or level must be provided for summarization');
                 }
                 break;
 

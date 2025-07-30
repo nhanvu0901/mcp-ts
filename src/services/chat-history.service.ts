@@ -77,41 +77,10 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
             }
         } catch (error) {
             console.error('Failed to initialize session:', error);
-
-
             throw error;
 
         }
     }
-
-    private async handleDuplicateKeyError(sessionId: string): Promise<void> {
-        console.log('Handling duplicate key error...');
-
-        try {
-            // Only delete sessions for this specific user and sessionId combination
-            await this.mongoCollection.deleteMany({
-                [this.sessionIdField]: sessionId,
-                user_id: this.metadata.user_id
-            });
-
-            const sessionDoc = {
-                [this.sessionIdField]: sessionId,
-                user_id: this.metadata.user_id,
-                collection_id: this.metadata.collection_id || [],
-                title: this.metadata.title || null,
-                messages: [],
-                CreatedAt: new Date(),
-                UpdatedAt: new Date()
-            };
-
-            await this.mongoCollection.insertOne(sessionDoc);
-            console.log(`Successfully created session after cleanup: ${sessionId} for user: ${this.metadata.user_id}`);
-        } catch (retryError) {
-            console.error('Retry after cleanup failed:', retryError);
-            throw retryError;
-        }
-    }
-
     override async addMessage(message: BaseMessage): Promise<void> {
         await this.initializationPromise;
 
