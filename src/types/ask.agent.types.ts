@@ -8,19 +8,22 @@ export interface SourceReference {
     reference_type: 'page' | 'chunk';
     text_content?: string;
 }
+
 export interface AskAgentBody {
     query: string;
     user_id: string;
-    collection_id: string | string[];
+    session_id?: string; // NEW: Optional session ID
+    collection_id?: string | string[]; // NOW: Optional collection ID
     doc_id?: string;
-    intent?: IntentRequest; // NEW: Optional intent parameter
+    intent?: IntentRequest;
 }
 
 export interface AskAgentResponse {
     success: boolean;
     response?: string;
     user_id?: string;
-    collection_id?: string;
+    session_id?: string; // NEW: Always returned
+    collection_id?: string | string[];
     timestamp?: string;
     source_references?: SourceReference[];
     sources_count?: number;
@@ -37,7 +40,7 @@ export interface ExtractedContent {
 export interface AgentToolInput {
     query: string;
     user_id: string;
-    collection_id: string[];
+    collection_id?: string[]; // NOW: Optional
     doc_id?: string;
     has_document_context?: boolean;
 }

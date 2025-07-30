@@ -28,11 +28,11 @@ export const AskAgentSchema = {
     ],
     body: {
         type: "object",
-        required: ["user_id", "collection_id"],
+        required: ["user_id"],
         properties: {
             query: {
                 type: "string",
-                description: "The query to search for in documents or question about specific document. Required when intent is not provided.",
+                description: "The query to search for in documents or question. Required when intent is not provided.",
                 minLength: 1,
                 maxLength: 2000
             },
@@ -40,12 +40,16 @@ export const AskAgentSchema = {
                 type: "string",
                 description: "User identifier"
             },
+            session_id: {
+                type: "string",
+                description: "Optional session identifier. If not provided, a new session will be created."
+            },
             collection_id: {
                 anyOf: [
                     {type: "string"},
                     {type: "array", items: {type: "string"}, minItems: 1}
                 ],
-                description: "Collection identifier(s) to search within. Can be a string or an array of strings."
+                description: "Optional collection identifier(s) to search within. Can be a string or an array of strings."
             },
             doc_id: {
                 type: "string",
@@ -60,7 +64,6 @@ export const AskAgentSchema = {
                         enum: ["summarise", "translate", "search"],
                         description: "The type of action to perform"
                     },
-                    // Summarization options
                     level: {
                         type: "string",
                         enum: ["concise", "medium", "detailed"],
@@ -72,12 +75,10 @@ export const AskAgentSchema = {
                         maximum: 2000,
                         description: "Target word count for summarization (only for 'summarise' intent)"
                     },
-                    // Translation options
                     target_language: {
                         type: "string",
-                        description: "Target language for translation (only for 'translate' intent). E.g., 'en', 'de', 'fr'"
+                        description: "Target language for translation (only for 'translate' intent)"
                     },
-                    // Search options
                     limit: {
                         type: "number",
                         minimum: 1,
@@ -89,7 +90,6 @@ export const AskAgentSchema = {
                 additionalProperties: false
             }
         },
-        // Custom validation: either query or intent must be provided
         anyOf: [
             {required: ["query"]},
             {required: ["intent"]}
@@ -97,13 +97,19 @@ export const AskAgentSchema = {
     },
     response: {
         200: {
-            description: "Agent response generated successfully with source references",
+            description: "Agent response generated successfully",
             type: "object",
             properties: {
                 success: {type: "boolean"},
                 response: {type: "string"},
                 user_id: {type: "string"},
-                collection_id: {type: "string"},
+                session_id: {type: "string"},
+                collection_id: {
+                    anyOf: [
+                        {type: "string"},
+                        {type: "array", items: {type: "string"}}
+                    ]
+                },
                 timestamp: {type: "string"},
                 query_type: {type: "string", enum: ["document_specific", "general", "intent_based"]},
                 intent_type: {type: "string"},
@@ -123,22 +129,6 @@ export const AskAgentSchema = {
                     }
                 },
                 sources_count: {type: "number"}
-            }
-        },
-        400: {
-            description: "Bad request - invalid query/intent or missing parameters",
-            type: "object",
-            properties: {
-                error: {type: "string"},
-                success: {type: "boolean"}
-            }
-        },
-        500: {
-            description: "Internal server error",
-            type: "object",
-            properties: {
-                error: {type: "string"},
-                success: {type: "boolean"}
             }
         }
     }

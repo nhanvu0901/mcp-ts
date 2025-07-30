@@ -14,21 +14,18 @@ export class AskAgentController {
         try {
             const { query, user_id: userId, collection_id: collectionId, doc_id: docId, intent } = request.body;
 
-
             if (!query && !intent) {
                 throw new Error('Either query or intent parameter is required');
             }
 
-
             if (intent) {
                 IntentUtils.validateIntent(intent, docId);
-                // For intent-based requests, userId and collectionId are still required
                 if (!userId) throw new Error('user_id is required');
                 if (!collectionId) throw new Error('collection_id is required');
             } else {
-                // Use existing validation for query-based requests
                 AgentUtils.validateRequest(query, userId, collectionId);
             }
+
             let queryType: 'document_specific' | 'general' | 'intent_based';
             let intentType: string | undefined;
             let aiResponse: string;
@@ -44,13 +41,12 @@ export class AskAgentController {
                     userId,
                     collectionId,
                     docId,
-                    query // Pass query as fallback for search intent
+                    query
                 );
 
                 aiResponse = result.aiResponse;
                 ragResponse = result.ragResponse;
             } else {
-                // Existing agent-based processing
                 const isDocumentSpecific = !!docId;
                 queryType = isDocumentSpecific ? 'document_specific' : 'general';
 
@@ -66,7 +62,6 @@ export class AskAgentController {
                 ragResponse = result.ragResponse;
             }
 
-            // Extract source references (same logic for both paths)
             const sourceReferences = AgentUtils.extractSourceReferences(aiResponse, ragResponse);
 
             return reply.send({
@@ -117,10 +112,9 @@ export class AskAgentController {
                 userId,
                 collectionId,
                 docId,
-                intentParams: { ...intent, intent: undefined } // Log intent params without the type
+                intentParams: { ...intent, intent: undefined }
             }, 'Processing intent-based request');
 
-            // Use IntentUtils to process the intent
             const result = await IntentUtils.processIntent(
                 mcpClient,
                 intent,
@@ -183,7 +177,6 @@ export class AskAgentController {
         }
     }
 
-    // Existing method - no changes needed
     private static async processAgentQuestion(
         request: FastifyRequest,
         query: string,
@@ -198,7 +191,6 @@ export class AskAgentController {
                 throw new Error('Required services not initialized on server instance');
             }
 
-            // Always treat collectionId as an array
             const collectionIds: string[] = Array.isArray(collectionId) ? collectionId : [collectionId];
             const sessionCollectionId = collectionIds.join(',');
             const sessionId = `${userId}_${sessionCollectionId}`;
@@ -212,7 +204,6 @@ export class AskAgentController {
             let hasDocumentContext = false;
 
             if (docId) {
-                // Check doc exist or not
                 hasDocumentContext = await this.checkDocumentsExist(mongoClient, userId, collectionIds, docId);
 
                 if (hasDocumentContext) {
@@ -221,7 +212,6 @@ export class AskAgentController {
                     userMessage = `User ID: ${userId}, Collection ID: ${sessionCollectionId}, Document ID: ${docId}, Has Document Context: false\n\nDocument-specific query: ${query}`;
                 }
             } else {
-                // Check if collections have documents
                 hasDocumentContext = await this.checkDocumentsExist(mongoClient, userId, collectionIds);
 
                 if (hasDocumentContext) {
@@ -236,7 +226,6 @@ export class AskAgentController {
                 new HumanMessage(userMessage)
             ];
 
-            // Pass structured tool input to the agent, always as array
             const toolInput: AgentToolInput = {
                 query,
                 user_id: userId,
@@ -250,7 +239,7 @@ export class AskAgentController {
             const agentResponse = await agent.invoke({ messages, toolInput });
             const { aiResponse, ragResponse } = AgentUtils.extractResponseContent(agentResponse);
 
-            await chatHistoryService.saveConversation(chatHistory, query, aiResponse, sessionId);
+            await chatHistoryService.saveConversation(chatHistory, query, aiResponse, sessionId, docId);
 
             return { aiResponse, ragResponse };
 
