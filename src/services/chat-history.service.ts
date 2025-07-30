@@ -16,6 +16,8 @@ import {
 export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
     private metadata: ExtendedChatMetadata;
     private mongoCollection: Collection;
+    private initializationPromise: Promise<void>;
+    private sessionIdField: string;
 
     constructor(fields: {
         collection: Collection;
@@ -29,83 +31,167 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
 
         this.mongoCollection = fields.collection;
         this.metadata = fields.metadata || {};
-
-        this.initializeSession(fields.sessionId);
+        this.sessionIdField = 'SessionId';
+        this.initializationPromise = this.initializeSession(fields.sessionId);
     }
 
     private getSessionId(): string {
         return (this as any).sessionId;
     }
 
+    private getSessionQuery(sessionId: string): any {
+        return {
+            [this.sessionIdField]: sessionId,
+            user_id: this.metadata.user_id
+        };
+    }
+
     private async initializeSession(sessionId: string): Promise<void> {
         try {
-            const existingSession = await this.mongoCollection.findOne({ sessionId: sessionId });
+            if (!sessionId || sessionId === 'null' || sessionId === 'undefined') {
+                throw new Error('Invalid sessionId provided');
+            }
 
-            if (!existingSession && this.metadata.user_id) {
-                await this.mongoCollection.insertOne({
-                    sessionId: sessionId,
+            if (!this.metadata.user_id) {
+                throw new Error('user_id is required in metadata');
+            }
+
+            const query = this.getSessionQuery(sessionId);
+            const existingSession = await this.mongoCollection.findOne(query);
+
+            if (!existingSession) {
+                const sessionDoc = {
+                    [this.sessionIdField]: sessionId,
                     user_id: this.metadata.user_id,
-                    collection_id: this.metadata.collection_id || [], // Can be empty array
+                    collection_id: this.metadata.collection_id || [],
                     title: this.metadata.title || null,
                     messages: [],
                     CreatedAt: new Date(),
                     UpdatedAt: new Date()
-                });
+                };
+
+                await this.mongoCollection.insertOne(sessionDoc);
+                console.log(`Created new session: ${sessionId} for user: ${this.metadata.user_id}`);
+            } else {
+                console.log(`Found existing session: ${sessionId} for user: ${this.metadata.user_id}`);
             }
         } catch (error) {
-            console.warn('Failed to initialize session:', error);
+            console.error('Failed to initialize session:', error);
+
+
+            throw error;
+
+        }
+    }
+
+    private async handleDuplicateKeyError(sessionId: string): Promise<void> {
+        console.log('Handling duplicate key error...');
+
+        try {
+            // Only delete sessions for this specific user and sessionId combination
+            await this.mongoCollection.deleteMany({
+                [this.sessionIdField]: sessionId,
+                user_id: this.metadata.user_id
+            });
+
+            const sessionDoc = {
+                [this.sessionIdField]: sessionId,
+                user_id: this.metadata.user_id,
+                collection_id: this.metadata.collection_id || [],
+                title: this.metadata.title || null,
+                messages: [],
+                CreatedAt: new Date(),
+                UpdatedAt: new Date()
+            };
+
+            await this.mongoCollection.insertOne(sessionDoc);
+            console.log(`Successfully created session after cleanup: ${sessionId} for user: ${this.metadata.user_id}`);
+        } catch (retryError) {
+            console.error('Retry after cleanup failed:', retryError);
+            throw retryError;
         }
     }
 
     override async addMessage(message: BaseMessage): Promise<void> {
+        await this.initializationPromise;
+
         try {
+            const sessionId = this.getSessionId();
+            if (!sessionId || sessionId === 'null') {
+                throw new Error('Invalid sessionId for addMessage');
+            }
+
+            if (!this.metadata.user_id) {
+                throw new Error('user_id is required for addMessage');
+            }
+
             const customMessage = this.convertToCustomMessage(message);
 
             const updateFields: any = {
                 UpdatedAt: new Date(),
-                $push: { messages: customMessage }
+                user_id: this.metadata.user_id,
+                collection_id: this.metadata.collection_id || [],
             };
-
-            if (this.metadata.user_id) {
-                updateFields.user_id = this.metadata.user_id;
-            }
-
-            if (this.metadata.collection_id) {
-                updateFields.collection_id = this.metadata.collection_id;
-            }
 
             if (this.metadata.title) {
                 updateFields.title = this.metadata.title;
             }
 
-            await this.mongoCollection.updateOne(
-                { sessionId: this.getSessionId() },
+            const query = this.getSessionQuery(sessionId);
+            const result = await this.mongoCollection.updateOne(
+                query,
                 {
-                    $set: {
-                        UpdatedAt: updateFields.UpdatedAt,
-                        ...(updateFields.user_id && { user_id: updateFields.user_id }),
-                        ...(updateFields.collection_id && { collection_id: updateFields.collection_id }),
-                        ...(updateFields.title && { title: updateFields.title })
-                    },
+                    $set: updateFields,
                     $push: { messages: customMessage as any}
                 },
-                { upsert: true }
+                { upsert: false }
             );
+
+            if (result.matchedCount === 0) {
+                throw new Error(`Session not found: ${sessionId} for user: ${this.metadata.user_id}`);
+            }
+
+            console.log(`Added message to session: ${sessionId} for user: ${this.metadata.user_id}`);
         } catch (error) {
             console.error('Error adding custom message:', error);
+            throw error;
         }
     }
 
     override async getMessages(): Promise<BaseMessage[]> {
-        try {
-            const session = await this.mongoCollection.findOne(
-                { sessionId: this.getSessionId() },
-                { projection: { messages: 1 } }
-            );
+        await this.initializationPromise;
 
-            if (!session?.messages) {
+        try {
+            const sessionId = this.getSessionId();
+            if (!sessionId || sessionId === 'null') {
+                console.log('No valid sessionId, returning empty messages');
                 return [];
             }
+
+            if (!this.metadata.user_id) {
+                console.log('No user_id in metadata, returning empty messages');
+                return [];
+            }
+
+            const query = this.getSessionQuery(sessionId);
+            console.log(`Getting messages for query:`, query);
+
+            const session = await this.mongoCollection.findOne(
+                query,
+                { projection: { messages: 1, SessionId: 1, user_id: 1 } }
+            );
+
+            if (!session) {
+                console.log(`No session found for sessionId: ${sessionId}, user_id: ${this.metadata.user_id}`);
+                return [];
+            }
+
+            if (!session.messages || session.messages.length === 0) {
+                console.log(`Session found but no messages for sessionId: ${sessionId}, user_id: ${this.metadata.user_id}`);
+                return [];
+            }
+
+            console.log(`Found ${session.messages.length} messages for sessionId: ${sessionId}, user_id: ${this.metadata.user_id}`);
 
             return session.messages.map((msg: CustomMessage) => {
                 const textContent = msg.content.find(c => c.type === 'text')?.text || '';
@@ -122,7 +208,7 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
                 }
             });
         } catch (error) {
-            console.warn('Failed to get messages:', error);
+            console.error('Failed to get messages:', error);
             return [];
         }
     }
@@ -157,34 +243,36 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
         this.metadata = { ...this.metadata, ...metadata };
     }
 
-     async setTitleFromMessage(message: string, maxLength: number = 50): Promise<void> {
+    async setTitleFromMessage(message: string, maxLength: number = 50): Promise<void> {
+        await this.initializationPromise;
+
         try {
-            // Check if title already exists in database
+            const sessionId = this.getSessionId();
+            if (!sessionId || sessionId === 'null' || !this.metadata.user_id) {
+                return;
+            }
+
+            const query = this.getSessionQuery(sessionId);
             const existingSession = await this.mongoCollection.findOne(
-                { sessionId: this.getSessionId() },
+                query,
                 { projection: { title: 1, messages: 1 } }
             );
 
-            // Only set title if no title exists AND this is truly the first user message
-
             if (!existingSession?.title && (!existingSession?.messages || existingSession.messages.length === 0)) {
-
                 const cleanMessage = message
                     .replace(/^(User ID:|Collection ID:|Document ID:|Has Document Context:).*?\n\n/g, '')
-                    .replace(/^(Document-specific query:|General query:)\s*/i, '')
+                    .replace(/^(Document-specific query:|General query:|Collection-specific query:)\s*/i, '')
                     .trim();
 
-                // Create concise title
                 const title = cleanMessage.length > maxLength
                     ? cleanMessage.substring(0, maxLength).trim() + '...'
                     : cleanMessage.trim();
 
-                // Only proceed if we have a meaningful title
                 if (title && title !== '...') {
                     this.metadata.title = title;
 
                     await this.mongoCollection.updateOne(
-                        { sessionId: this.getSessionId() },
+                        query,
                         {
                             $set: {
                                 title: title,
@@ -193,7 +281,7 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
                         }
                     );
 
-                    console.log(`Set conversation title: "${title}" for session: ${this.getSessionId()}`);
+                    console.log(`Set title "${title}" for session: ${sessionId}, user: ${this.metadata.user_id}`);
                 }
             }
         } catch (error) {
@@ -202,9 +290,17 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
     }
 
     async getCustomMessages(): Promise<CustomMessage[]> {
+        await this.initializationPromise;
+
         try {
+            const sessionId = this.getSessionId();
+            if (!sessionId || sessionId === 'null' || !this.metadata.user_id) {
+                return [];
+            }
+
+            const query = this.getSessionQuery(sessionId);
             const session = await this.mongoCollection.findOne(
-                { sessionId: this.getSessionId() },
+                query,
                 { projection: { messages: 1 } }
             );
 
@@ -216,9 +312,17 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
     }
 
     async getSessionMetadata(): Promise<ExtendedChatMetadata | null> {
+        await this.initializationPromise;
+
         try {
+            const sessionId = this.getSessionId();
+            if (!sessionId || sessionId === 'null' || !this.metadata.user_id) {
+                return null;
+            }
+
+            const query = this.getSessionQuery(sessionId);
             const session = await this.mongoCollection.findOne(
-                { sessionId: this.getSessionId() },
+                query,
                 { projection: { user_id: 1, collection_id: 1, title: 1, CreatedAt: 1, UpdatedAt: 1 } }
             );
 
@@ -257,6 +361,16 @@ export class ChatHistoryService implements IChatHistoryService {
         sessionId: string,
         metadata?: ExtendedChatMetadata
     ): Promise<ExtendedMongoDBChatHistory> {
+        if (!sessionId || sessionId === 'null' || sessionId === 'undefined') {
+            throw new Error(`Invalid sessionId: ${sessionId}`);
+        }
+
+        if (!userId) {
+            throw new Error('userId is required');
+        }
+
+        console.log(`Getting chat history for sessionId: ${sessionId}, userId: ${userId}`);
+
         return new ExtendedMongoDBChatHistory({
             collection: this.chatMemoryCollection,
             sessionId: sessionId,
@@ -268,6 +382,8 @@ export class ChatHistoryService implements IChatHistoryService {
     }
 
     async buildContextMessages(allMessages: any[], sessionId: string): Promise<any[]> {
+        console.log(`Building context messages for sessionId: ${sessionId}, total messages: ${allMessages.length}`);
+
         if (allMessages.length <= this.shortTermLimit) {
             return allMessages;
         }
@@ -293,6 +409,7 @@ export class ChatHistoryService implements IChatHistoryService {
         }
 
         contextMessages.push(...recentMessages);
+        console.log(`Context messages built: ${contextMessages.length} total messages`);
         return contextMessages;
     }
 
@@ -304,7 +421,8 @@ export class ChatHistoryService implements IChatHistoryService {
         docId?: string
     ): Promise<void> {
         try {
-            // Only set title from first message
+            console.log(`Saving conversation for sessionId: ${sessionId}`);
+
             await chatHistory.setTitleFromMessage(userQuery);
 
             if (docId) {
@@ -316,6 +434,8 @@ export class ChatHistoryService implements IChatHistoryService {
 
             const allMessages = await chatHistory.getMessages();
             await this.checkAndCreateSummary(allMessages, sessionId);
+
+            console.log(`Conversation saved successfully for sessionId: ${sessionId}`);
         } catch (error) {
             console.error('Error saving conversation:', error);
             throw error;
@@ -326,13 +446,10 @@ export class ChatHistoryService implements IChatHistoryService {
         try {
             await this.chatMemoryCollection.deleteMany({
                 $or: [
-                    { SessionId: { $exists: true } },
-                    { History: { $exists: true } },
-                    { sessionId: { $exists: false } }
+                    { SessionId: null },
+                    { History: { $exists: true } }
                 ]
             });
-
-            console.log('Cleaned up duplicate chat history entries');
         } catch (error) {
             console.error('Error cleaning up duplicate entries:', error);
         }
@@ -415,11 +532,11 @@ export class ChatHistoryService implements IChatHistoryService {
                 .find(
                     {
                         user_id: userId,
-                        sessionId: { $exists: true }
+                        SessionId: { $exists: true, $ne: null }
                     },
                     {
                         projection: {
-                            sessionId: 1,
+                            SessionId: 1,
                             title: 1,
                             collection_id: 1,
                             messages: 1,
@@ -432,8 +549,8 @@ export class ChatHistoryService implements IChatHistoryService {
                 .limit(limit)
                 .toArray();
 
-            return conversations.map((conv: { sessionId: any; title: any; messages: string | any[]; UpdatedAt: any; CreatedAt: any; collection_id: any; }) => ({
-                sessionId: conv.sessionId,
+            return conversations.map((conv: { SessionId: any; title: any; messages: string | any[]; UpdatedAt: any; CreatedAt: any; collection_id: any; }) => ({
+                sessionId: conv.SessionId,
                 title: conv.title || 'Untitled Conversation',
                 messageCount: conv.messages?.length || 0,
                 lastActivity: conv.UpdatedAt || conv.CreatedAt,
@@ -448,7 +565,7 @@ export class ChatHistoryService implements IChatHistoryService {
     async deleteConversation(sessionId: string, userId: string): Promise<boolean> {
         try {
             const result = await this.chatMemoryCollection.deleteOne({
-                sessionId: sessionId,
+                SessionId: sessionId,
                 user_id: userId
             });
 
@@ -462,7 +579,7 @@ export class ChatHistoryService implements IChatHistoryService {
     async updateConversationTitle(sessionId: string, userId: string, newTitle: string): Promise<boolean> {
         try {
             const result = await this.chatMemoryCollection.updateOne(
-                { sessionId: sessionId, user_id: userId },
+                { SessionId: sessionId, user_id: userId },
                 {
                     $set: {
                         title: newTitle,

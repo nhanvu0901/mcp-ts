@@ -21,7 +21,6 @@ export class AskAgentController {
                 session_id: providedSessionId
             } = request.body;
 
-            // Basic validation
             if (!query && !intent) {
                 throw new Error('Either query or intent parameter is required');
             }
@@ -30,10 +29,8 @@ export class AskAgentController {
                 throw new Error('user_id is required');
             }
 
-            // Generate session_id if not provided
             const sessionId = providedSessionId || AgentUtils.generateSessionId(userId, collectionId);
 
-            // Validate intent-specific requirements
             if (intent) {
                 IntentUtils.validateIntent(intent, docId, collectionId);
 
@@ -60,7 +57,6 @@ export class AskAgentController {
                 });
             }
 
-            // Query-based processing
             AgentUtils.validateRequest(query as string, userId);
 
             const isDocumentSpecific = !!docId;
@@ -167,7 +163,6 @@ export class AskAgentController {
             const collection = db.collection("documents");
 
             if (docId) {
-                // Check for specific document
                 const documentExists = await collection.findOne(
                     {
                         _id: docId,
@@ -177,7 +172,6 @@ export class AskAgentController {
                 );
                 return documentExists !== null;
             } else {
-                // Check for any documents (with optional collection filtering)
                 const query: any = {
                     user_id: userId
                 };
@@ -210,29 +204,29 @@ export class AskAgentController {
                 throw new Error('Required services not initialized on server instance');
             }
 
-            // Use provided sessionId or generate one
             const finalSessionId = sessionId || AgentUtils.generateSessionId(userId, collectionId);
 
             const chatHistoryService = new ChatHistoryService(mongoClient, model);
-            const chatHistory = await chatHistoryService.getChatHistory(userId, finalSessionId);
 
-            const allMessages = await chatHistory.getMessages();
-            const contextMessages = await chatHistoryService.buildContextMessages(allMessages, finalSessionId);
-
-            // FIXED: Implement proper logic for normal LLM usage
-            // If no collection_id provided, use normal LLM without document context
-            let hasDocumentContext = false;
             const collectionIds: string[] = collectionId
                 ? (Array.isArray(collectionId) ? collectionId : [collectionId])
                 : [];
 
-            // Only check for documents if collection_id is provided OR doc_id is specified
+            const chatHistory = await chatHistoryService.getChatHistory(userId, finalSessionId, {
+                user_id: userId,
+                collection_id: collectionIds,
+                doc_id: docId
+            });
+
+            const allMessages = await chatHistory.getMessages();
+            const contextMessages = await chatHistoryService.buildContextMessages(allMessages, finalSessionId);
+
+            let hasDocumentContext = false;
+
             if (collectionIds.length > 0 || docId) {
                 hasDocumentContext = await this.checkDocumentsExist(mongoClient, userId, collectionIds, docId);
             }
-            // If no collection_id and no doc_id → hasDocumentContext stays false (normal LLM mode)
 
-            // Build user message with context information
             let userMessage: string;
             const collectionIdStr = collectionIds.length > 0 ? collectionIds.join(',') : 'none';
 
@@ -241,7 +235,6 @@ export class AskAgentController {
             } else if (collectionIds.length > 0) {
                 userMessage = `User ID: ${userId}, Collection ID: ${collectionIdStr}, Has Document Context: ${hasDocumentContext}\n\nCollection-specific query: ${query}`;
             } else {
-                // Normal LLM mode - no document context mentioned
                 userMessage = `User ID: ${userId}, Collection ID: ${collectionIdStr}, Has Document Context: ${hasDocumentContext}\n\nGeneral query: ${query}`;
             }
 
