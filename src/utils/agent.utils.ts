@@ -31,7 +31,7 @@ export class AgentUtils {
         };
     }
 
-    static validateRequest(query: string, userId: string, collectionId: string | string[]): void {
+    static validateRequest(query: string, userId: string, collectionId?: string | string[]): void {
         if (!query?.trim()) {
             throw new Error('Query is required and cannot be empty');
         }
@@ -39,14 +39,19 @@ export class AgentUtils {
         if (!userId) {
             throw new Error('user_id is required');
         }
+    }
 
-        if (
-            collectionId === undefined ||
-            (typeof collectionId === 'string' && !collectionId) ||
-            (Array.isArray(collectionId) && collectionId.length === 0)
-        ) {
-            throw new Error('collection_id is required');
+    static generateSessionId(userId: string, collectionId?: string | string[]): string {
+        const timestamp = Date.now();
+        const randomSuffix = Math.random().toString(36).substring(2, 8);
+
+        if (collectionId && (Array.isArray(collectionId) ? collectionId.length > 0 : collectionId)) {
+            const collectionIds: string[] = Array.isArray(collectionId) ? collectionId : [collectionId];
+            const sessionCollectionId = collectionIds.join(',');
+            return `${userId}_${sessionCollectionId}_${timestamp}_${randomSuffix}`;
         }
+
+        return `${userId}_general_${timestamp}_${randomSuffix}`;
     }
 
     static extractSourceReferences(responseText: string, ragResponse: string | null = null): SourceReference[] {
@@ -136,19 +141,15 @@ export class AgentUtils {
             return null;
         }
 
-        // Determine the text segment that belongs to this citation
         let textStart = 0;
         let textEnd = targetCitation.index;
 
-        // Find the previous citation to determine where our text starts
         const previousCitations = citations.filter(c => c.index < targetCitation.index);
         if (previousCitations.length > 0) {
-
             const prevCitation = previousCitations[previousCitations.length - 1];
             textStart = prevCitation.index + prevCitation.match[0].length;
         }
 
-        // Extract the text content between the boundaries
         let textContent = ragResponse.substring(textStart, textEnd).trim();
 
         textContent = textContent
@@ -156,7 +157,6 @@ export class AgentUtils {
             .replace(/[ \t]+/g, ' ')
             .trim();
 
-        // Remove any leading/trailing whitespace from each line
         textContent = textContent
             .split('\n')
             .map(line => line.trim())

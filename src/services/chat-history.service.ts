@@ -157,7 +157,7 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
         this.metadata = { ...this.metadata, ...metadata };
     }
 
-    async setTitleFromMessage(message: string, maxLength: number = 50): Promise<void> {
+     async setTitleFromMessage(message: string, maxLength: number = 50): Promise<void> {
         try {
             // Check if title already exists in database
             const existingSession = await this.mongoCollection.findOne(
@@ -165,27 +165,36 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
                 { projection: { title: 1, messages: 1 } }
             );
 
-            // Only set title if it doesn't exist AND this is the first user message
+            // Only set title if no title exists AND this is truly the first user message
+
             if (!existingSession?.title && (!existingSession?.messages || existingSession.messages.length === 0)) {
+
                 const cleanMessage = message
                     .replace(/^(User ID:|Collection ID:|Document ID:|Has Document Context:).*?\n\n/g, '')
+                    .replace(/^(Document-specific query:|General query:)\s*/i, '')
                     .trim();
 
+                // Create concise title
                 const title = cleanMessage.length > maxLength
                     ? cleanMessage.substring(0, maxLength).trim() + '...'
                     : cleanMessage.trim();
 
-                this.metadata.title = title;
+                // Only proceed if we have a meaningful title
+                if (title && title !== '...') {
+                    this.metadata.title = title;
 
-                await this.mongoCollection.updateOne(
-                    { sessionId: this.getSessionId() },
-                    {
-                        $set: {
-                            title: title,
-                            UpdatedAt: new Date()
+                    await this.mongoCollection.updateOne(
+                        { sessionId: this.getSessionId() },
+                        {
+                            $set: {
+                                title: title,
+                                UpdatedAt: new Date()
+                            }
                         }
-                    }
-                );
+                    );
+
+                    console.log(`Set conversation title: "${title}" for session: ${this.getSessionId()}`);
+                }
             }
         } catch (error) {
             console.warn('Failed to set title:', error);

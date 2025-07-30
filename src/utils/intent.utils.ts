@@ -14,12 +14,10 @@ export class IntentUtils {
         }
 
         try {
-            // Get the tools from the DocDBSummarizationService
             const tools = await mcpClient.getTools('DocDBSummarizationService');
             let result: string;
 
             if (intent.word_count) {
-                // Find the word count based summarization tool
                 const wordCountTool = tools.find(tool => tool.name.includes('summarize_by_word_count'));
                 if (!wordCountTool) {
                     throw new Error('Word count summarization tool not found');
@@ -31,7 +29,6 @@ export class IntentUtils {
                     num_words: intent.word_count
                 });
             } else {
-                // Find the level based summarization tool
                 const levelTool = tools.find(tool => tool.name.includes('summarize_by_detail_level'));
                 if (!levelTool) {
                     throw new Error('Detail level summarization tool not found');
@@ -47,13 +44,12 @@ export class IntentUtils {
 
             return {
                 response: result,
-                ragResponse: null // Summarization doesn't produce RAG response
+                ragResponse: null
             };
         } catch (error) {
             throw new Error(`Summarization failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-
 
     static async processTranslateIntent(
         mcpClient: MultiServerMCPClient,
@@ -70,7 +66,6 @@ export class IntentUtils {
         }
 
         try {
-            // Get the tools from the DocumentTranslationService
             const tools = await mcpClient.getTools('DocumentTranslationService');
             const translateTool = tools.find(tool => tool.name.includes('translate_document'));
 
@@ -86,7 +81,7 @@ export class IntentUtils {
 
             return {
                 response: result,
-                ragResponse: null // Translation doesn't produce RAG response
+                ragResponse: null
             };
         } catch (error) {
             throw new Error(`Translation failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -97,14 +92,17 @@ export class IntentUtils {
         mcpClient: MultiServerMCPClient,
         intent: IntentRequest,
         userId: string,
-        collectionId: string | string[],
-        query: string = 'search documents' // Default query for intent-based search
+        collectionId?: string | string[],
+        query: string = 'search documents'
     ): Promise<{ response: string; ragResponse: string | null }> {
+        if (!collectionId || (Array.isArray(collectionId) && collectionId.length === 0)) {
+            throw new Error('Collection ID is required for search intent');
+        }
+
         try {
             const collectionIds: string[] = Array.isArray(collectionId) ? collectionId : [collectionId];
             const limit = intent.limit || 5;
 
-            // Get the tools from the RAGService
             const tools = await mcpClient.getTools('RAGService');
             const retrieveTool = tools.find(tool => tool.name.includes('retrieve'));
 
@@ -119,9 +117,8 @@ export class IntentUtils {
                 limit: limit
             });
 
-            // For search intent, we return the RAG response directly
             const response = ragResponse ?
-                `Found ${limit} relevant document:\n\n${ragResponse}` :
+                `Found ${limit} relevant documents:\n\n${ragResponse}` :
                 'No relevant documents found.';
 
             return {
@@ -137,7 +134,7 @@ export class IntentUtils {
         mcpClient: MultiServerMCPClient,
         intent: IntentRequest,
         userId: string,
-        collectionId: string | string[],
+        collectionId?: string | string[],
         docId?: string,
         fallbackQuery?: string
     ): Promise<{ response: string; ragResponse: string | null }> {
@@ -156,7 +153,7 @@ export class IntentUtils {
         }
     }
 
-    static validateIntent(intent: IntentRequest, docId?: string): void {
+    static validateIntent(intent: IntentRequest, docId?: string, collectionId?: string | string[]): void {
         if (!intent.intent) {
             throw new Error('Intent type is required');
         }
@@ -164,40 +161,42 @@ export class IntentUtils {
         switch (intent.intent) {
             case 'summarise':
                 if (!docId) {
-                    throw new Error('Document ID is required for summarization');
+                    throw new Error('Document ID is required for summarization intent');
                 }
 
-                // Validate word_count if provided
                 if (intent.word_count && intent.word_count < 10) {
                     throw new Error('Word count must be at least 10');
                 }
 
-                // Validate level if provided
                 if (intent.level && !['concise', 'medium', 'detailed'].includes(intent.level)) {
                     throw new Error('Level must be one of: concise, medium, detailed');
                 }
 
-                // Ensure at least one summarization parameter is provided
                 if (!intent.word_count && !intent.level) {
                     throw new Error('Either word_count or level must be provided for summarization');
                 }
-
                 break;
 
             case 'translate':
                 if (!docId) {
-                    throw new Error('Document ID is required for translation');
+                    throw new Error('Document ID is required for translation intent');
                 }
                 if (!intent.target_language) {
-                    throw new Error('Target language is required for translation');
+                    throw new Error('Target language is required for translation intent');
                 }
                 break;
 
             case 'search':
+                if (!collectionId || (Array.isArray(collectionId) && collectionId.length === 0)) {
+                    throw new Error('Collection ID is required for search intent');
+                }
                 if (intent.limit && intent.limit < 1) {
                     throw new Error('Search limit must be at least 1');
                 }
                 break;
+
+            default:
+                throw new Error(`Invalid intent type: ${intent.intent}`);
         }
     }
 }
