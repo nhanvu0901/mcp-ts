@@ -1,10 +1,10 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
-import { HumanMessage } from '@langchain/core/messages';
-import { AskAgentBody, AskAgentResponse, AgentToolInput } from '../types/ask.agent.types';
-import { IntentRequest} from "../types/intent.types";
-import { ChatHistoryService } from '../services';
-import { AgentUtils } from '../utils';
-import { IntentUtils } from '../utils/intent.utils';
+import {FastifyRequest, FastifyReply} from 'fastify';
+import {HumanMessage} from '@langchain/core/messages';
+import {AskAgentBody, AskAgentResponse, AgentToolInput} from '../types/ask.agent.types';
+import {IntentRequest} from "../types/intent.types";
+import {ChatHistoryService} from '../services';
+import {AgentUtils} from '../utils';
+import {IntentUtils} from '../utils/intent.utils';
 
 export class AskAgentController {
     public static async askAgent(
@@ -40,7 +40,8 @@ export class AskAgentController {
                     userId,
                     collectionId,
                     docId,
-                    query
+                    query,
+                    sessionId
                 );
 
                 return reply.send({
@@ -108,21 +109,24 @@ export class AskAgentController {
         userId: string,
         collectionId?: string | string[],
         docId?: string,
-        fallbackQuery?: string
+        fallbackQuery?: string,
+        sessionId?: string
     ): Promise<{ aiResponse: string; ragResponse: string | null }> {
         try {
-            const { mcpClient } = request.server;
+            const {mcpClient, mongoClient, model} = request.server;
 
             if (!mcpClient) {
                 throw new Error('MCP client not initialized on server instance');
             }
-
+            if (!mongoClient || !model) {
+                throw new Error('Required services not initialized on server instance');
+            }
             request.log.info({
                 intent: intent.intent,
                 userId,
                 collectionId,
                 docId,
-                intentParams: { ...intent, intent: undefined }
+                intentParams: {...intent, intent: undefined}
             }, 'Processing intent-based request');
 
             const result = await IntentUtils.processIntent(
@@ -133,7 +137,26 @@ export class AskAgentController {
                 docId,
                 fallbackQuery
             );
+            if (sessionId) {
+                const chatHistoryService = new ChatHistoryService(mongoClient, model);
+                const collectionIds: string[] = collectionId
+                    ? (Array.isArray(collectionId) ? collectionId : [collectionId])
+                    : [];
 
+                const chatHistory = await chatHistoryService.getChatHistory(userId, sessionId, {
+                    user_id: userId,
+                    collection_id: collectionIds,
+                    doc_id: docId
+                });
+
+                const intentQuery = `Intent: ${intent.intent}` +
+                    (intent.word_count ? ` (${intent.word_count} words)` : '') +
+                    (intent.level ? ` (${intent.level} level)` : '') +
+                    (intent.target_language ? ` (translate to ${intent.target_language})` : '') +
+                    (docId ? ` for document ${docId}` : '');
+
+                await chatHistoryService.saveConversation(chatHistory, intentQuery, result.response, sessionId, docId);
+            }
             return {
                 aiResponse: result.response,
                 ragResponse: result.ragResponse
@@ -198,7 +221,7 @@ export class AskAgentController {
         sessionId?: string
     ): Promise<{ aiResponse: string; ragResponse: string | null }> {
         try {
-            const { agent, mongoClient, model } = request.server;
+            const {agent, mongoClient, model} = request.server;
 
             if (!agent || !mongoClient || !model) {
                 throw new Error('Required services not initialized on server instance');
@@ -254,12 +277,12 @@ export class AskAgentController {
                 toolInput.doc_id = docId;
             }
 
-            const agentResponse = await agent.invoke({ messages, toolInput });
-            const { aiResponse, ragResponse } = AgentUtils.extractResponseContent(agentResponse);
+            const agentResponse = await agent.invoke({messages, toolInput});
+            const {aiResponse, ragResponse} = AgentUtils.extractResponseContent(agentResponse);
 
             await chatHistoryService.saveConversation(chatHistory, query, aiResponse, finalSessionId, docId);
 
-            return { aiResponse, ragResponse };
+            return {aiResponse, ragResponse};
 
         } catch (error) {
             request.log.error({

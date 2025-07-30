@@ -81,6 +81,7 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
 
         }
     }
+
     override async addMessage(message: BaseMessage): Promise<void> {
         await this.initializationPromise;
 
@@ -111,9 +112,9 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
                 query,
                 {
                     $set: updateFields,
-                    $push: { messages: customMessage as any}
+                    $push: {messages: customMessage as any}
                 },
-                { upsert: false }
+                {upsert: false}
             );
 
             if (result.matchedCount === 0) {
@@ -147,7 +148,7 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
 
             const session = await this.mongoCollection.findOne(
                 query,
-                { projection: { messages: 1, SessionId: 1, user_id: 1 } }
+                {projection: {messages: 1, SessionId: 1, user_id: 1}}
             );
 
             if (!session) {
@@ -184,7 +185,7 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
 
     private convertToCustomMessage(message: BaseMessage): CustomMessage {
         const role = message instanceof HumanMessage ? 'user' :
-                    message instanceof AIMessage ? 'assistant' : 'system';
+            message instanceof AIMessage ? 'assistant' : 'system';
 
         const content: MessageContent[] = [];
 
@@ -209,7 +210,7 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
     }
 
     updateMetadata(metadata: Partial<ExtendedChatMetadata>): void {
-        this.metadata = { ...this.metadata, ...metadata };
+        this.metadata = {...this.metadata, ...metadata};
     }
 
     async setTitleFromMessage(message: string, maxLength: number = 50): Promise<void> {
@@ -224,7 +225,7 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
             const query = this.getSessionQuery(sessionId);
             const existingSession = await this.mongoCollection.findOne(
                 query,
-                { projection: { title: 1, messages: 1 } }
+                {projection: {title: 1, messages: 1}}
             );
 
             if (!existingSession?.title && (!existingSession?.messages || existingSession.messages.length === 0)) {
@@ -255,57 +256,6 @@ export class ExtendedMongoDBChatHistory extends MongoDBChatMessageHistory {
             }
         } catch (error) {
             console.warn('Failed to set title:', error);
-        }
-    }
-
-    async getCustomMessages(): Promise<CustomMessage[]> {
-        await this.initializationPromise;
-
-        try {
-            const sessionId = this.getSessionId();
-            if (!sessionId || sessionId === 'null' || !this.metadata.user_id) {
-                return [];
-            }
-
-            const query = this.getSessionQuery(sessionId);
-            const session = await this.mongoCollection.findOne(
-                query,
-                { projection: { messages: 1 } }
-            );
-
-            return session?.messages || [];
-        } catch (error) {
-            console.warn('Failed to get custom messages:', error);
-            return [];
-        }
-    }
-
-    async getSessionMetadata(): Promise<ExtendedChatMetadata | null> {
-        await this.initializationPromise;
-
-        try {
-            const sessionId = this.getSessionId();
-            if (!sessionId || sessionId === 'null' || !this.metadata.user_id) {
-                return null;
-            }
-
-            const query = this.getSessionQuery(sessionId);
-            const session = await this.mongoCollection.findOne(
-                query,
-                { projection: { user_id: 1, collection_id: 1, title: 1, CreatedAt: 1, UpdatedAt: 1 } }
-            );
-
-            if (session) {
-                return {
-                    user_id: session.user_id,
-                    collection_id: session.collection_id,
-                    title: session.title
-                };
-            }
-            return null;
-        } catch (error) {
-            console.warn('Failed to get session metadata:', error);
-            return null;
         }
     }
 }
@@ -395,7 +345,7 @@ export class ChatHistoryService implements IChatHistoryService {
             await chatHistory.setTitleFromMessage(userQuery);
 
             if (docId) {
-                chatHistory.updateMetadata({ doc_id: docId });
+                chatHistory.updateMetadata({doc_id: docId});
             }
 
             await chatHistory.addMessage(new HumanMessage(userQuery));
@@ -415,8 +365,8 @@ export class ChatHistoryService implements IChatHistoryService {
         try {
             await this.chatMemoryCollection.deleteMany({
                 $or: [
-                    { SessionId: null },
-                    { History: { $exists: true } }
+                    {SessionId: null},
+                    {History: {$exists: true}}
                 ]
             });
         } catch (error) {
@@ -481,18 +431,25 @@ export class ChatHistoryService implements IChatHistoryService {
             })
             .join('\n');
 
-        const summaryPrompt = `Summarize this conversation exchange in exactly ${this.summaryWordLimit} words or less. Focus on key topics, decisions, and important context:
-                                ${conversationText}
-                                Summary:`;
+        const summaryPrompt = `You are a conversation summarizer. Create a concise summary following these STRICT rules:
+
+                1. Maximum ${this.summaryWordLimit} words
+                2. Focus on key topics, decisions, and important context
+                3. Use complete sentences
+                4. Do NOT add "..." or truncation indicators
+                5. End with proper punctuation
+                
+                Conversation to summarize:
+                ${conversationText}
+                
+                SUMMARY (max ${this.summaryWordLimit} words):`;
 
         const response = await this.model.invoke([new HumanMessage(summaryPrompt)]);
         const summary = typeof response.content === 'string'
             ? response.content.trim()
             : JSON.stringify(response.content).trim();
 
-        return summary.length > this.summaryWordLimit * 6
-            ? summary.substring(0, this.summaryWordLimit * 6) + '...'
-            : summary;
+        return summary;
     }
 
     async getUserConversations(userId: string, limit: number = 20): Promise<ConversationListItem[]> {
@@ -501,7 +458,7 @@ export class ChatHistoryService implements IChatHistoryService {
                 .find(
                     {
                         user_id: userId,
-                        SessionId: { $exists: true, $ne: null }
+                        SessionId: {$exists: true, $ne: null}
                     },
                     {
                         projection: {
@@ -514,11 +471,18 @@ export class ChatHistoryService implements IChatHistoryService {
                         }
                     }
                 )
-                .sort({ UpdatedAt: -1, CreatedAt: -1 })
+                .sort({UpdatedAt: -1, CreatedAt: -1})
                 .limit(limit)
                 .toArray();
 
-            return conversations.map((conv: { SessionId: any; title: any; messages: string | any[]; UpdatedAt: any; CreatedAt: any; collection_id: any; }) => ({
+            return conversations.map((conv: {
+                SessionId: any;
+                title: any;
+                messages: string | any[];
+                UpdatedAt: any;
+                CreatedAt: any;
+                collection_id: any;
+            }) => ({
                 sessionId: conv.SessionId,
                 title: conv.title || 'Untitled Conversation',
                 messageCount: conv.messages?.length || 0,
@@ -548,7 +512,7 @@ export class ChatHistoryService implements IChatHistoryService {
     async updateConversationTitle(sessionId: string, userId: string, newTitle: string): Promise<boolean> {
         try {
             const result = await this.chatMemoryCollection.updateOne(
-                { SessionId: sessionId, user_id: userId },
+                {SessionId: sessionId, user_id: userId},
                 {
                     $set: {
                         title: newTitle,

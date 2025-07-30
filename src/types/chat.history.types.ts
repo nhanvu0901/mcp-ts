@@ -1,4 +1,4 @@
-import {ConversationListItem, ExtendedMongoDBChatHistory} from "@/services";
+import {ExtendedMongoDBChatHistory} from "@/services";
 
 export interface ExtendedChatMetadata {
     user_id?: string;

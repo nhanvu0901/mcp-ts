@@ -10,10 +10,10 @@ export interface SourceReference {
 }
 
 export interface AskAgentBody {
-    query?: string; // Optional when intent is provided
+    query?: string;
     user_id: string;
-    session_id?: string; // Optional - auto-generated if not provided
-    collection_id?: string | string[]; // Optional
+    session_id?: string;
+    collection_id?: string | string[];
     doc_id?: string;
     intent?: IntentRequest;
 }
@@ -22,7 +22,7 @@ export interface AskAgentResponse {
     success: boolean;
     response?: string;
     user_id?: string;
-    session_id?: string; // Always returned
+    session_id?: string;
     collection_id?: string | string[];
     timestamp?: string;
     source_references?: SourceReference[];
@@ -40,7 +40,7 @@ export interface ExtractedContent {
 export interface AgentToolInput {
     query: string;
     user_id: string;
-    collection_id?: string[]; // Optional
+    collection_id?: string[];
     doc_id?: string;
     has_document_context?: boolean;
 }
