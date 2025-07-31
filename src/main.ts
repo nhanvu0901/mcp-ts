@@ -41,6 +41,7 @@ const config = {
     // Application Settings
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '10485760'),
     UPLOAD_DIR: process.env.UPLOAD_DIR || './src/python/data/uploads',
+    TFIDF_MODELS_DIR: process.env.TFIDF_MODELS_DIR || './src/python/data/tfidf_models',
     // MONGODB_URI: process.env.MONGODB_URI || 'mongodb://admin:admin123@mongodb:27017/ai_assistant?authSource=admin',
     MONGODB_URI: 'mongodb://admin:admin123@localhost:27017/ai_assistant?authSource=admin',
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || 'RAG',
@@ -49,6 +50,7 @@ const config = {
 async function setupDirectories() {
     try {
         await mkdir(config.UPLOAD_DIR, {recursive: true});
+        await mkdir(config.TFIDF_MODELS_DIR, {recursive: true})
     } catch (error) {
         console.error('Failed to create upload directory:', error);
         throw error;

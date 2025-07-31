@@ -147,14 +147,44 @@ class QdrantService:
         self.tfidf_vectorizer.fit(texts)
         self._save_tfidf_vectorizer()
         print(f"✅ Trained TF-IDF vectorizer on {len(texts)} documents")
-    
+
+    def retrain_tfidf_with_all_documents(self, user_id: str):
+        """Retrain TF-IDF vectorizer using all documents in the collection"""
+        if not self.enable_hybrid:
+            return
+
+        try:
+            all_points = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
+                limit=10000,
+                with_payload=True
+            )[0]
+
+            if not all_points:
+                return
+
+            all_texts = [point.payload.get('text', '') for point in all_points if point.payload.get('text')]
+
+            if all_texts:
+                print(f"Retraining TF-IDF vectorizer on {len(all_texts)} chunks")
+                self.tfidf_vectorizer = TfidfVectorizer(stop_words='english', max_features=10000)
+                self.tfidf_vectorizer.fit(all_texts)
+                self._save_tfidf_vectorizer()
+
+        except Exception as e:
+            print(f"Error retraining TF-IDF vectorizer: {e}")
+
     def upsert_chunks(self, chunks: list, dense_embeddings: list, metadata_list: list, user_id: str):
         """Upsert chunks with both dense and sparse vectors"""
         # Train TF-IDF if not available and hybrid is enabled
-        if self.enable_hybrid and self.tfidf_vectorizer is None:
-            print("Training TF-IDF vectorizer...")
-            self.train_tfidf_vectorizer(chunks)
-        
+        if self.enable_hybrid:
+            if self.tfidf_vectorizer is None:
+                print("Training TF-IDF vectorizer...")
+                self.train_tfidf_vectorizer(chunks)
+            else:
+                self.retrain_tfidf_with_all_documents(user_id)
+
         points_to_upsert = []
         
         for i, (chunk, dense_embedding, metadata) in enumerate(zip(chunks, dense_embeddings, metadata_list)):
