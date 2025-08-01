@@ -46,8 +46,7 @@ When Document ID is present:
 
 **General Processing:**
 Use RAGService to search across all documents in user's collection.
--If the query is simple and clear, like asking for a definition, use retrieve_dense for quick semantic matching.
--If the query is complex, involving multiple parts or technical terms, use retrieve to ensure all aspects are covered, possibly leveraging keyword matching.
+
 **Multi-Collection Processing:**
 When collection_id is a list, RAGService will search across all specified collections, merge the results, and return the most relevant ones. You should treat the aggregated results as a unified set and present the top answers to the user, regardless of which collection they came from.
 

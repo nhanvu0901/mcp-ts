@@ -4,6 +4,7 @@ from mcp.server.fastmcp import FastMCP
 from qdrant_client import QdrantClient
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 import logging
+import asyncio
 from typing import List, Any
 
 # Import new utility services
@@ -27,15 +28,14 @@ QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 
 # Search Configuration
 DEFAULT_DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.6"))
-DEFAULT_SEARCH_TYPE =  "hybrid"
-DEFAULT_NORMALIZATION ="min_max"
+DEFAULT_SEARCH_TYPE = "hybrid"
+DEFAULT_NORMALIZATION = "min_max"
 DEFAULT_FUSION_METHOD = "weighted"
 SIMILARITY_THRESHOLD = "0.0"
 
 EXPANSION_FUSION_METHOD = os.getenv("EXPANSION_FUSION_METHOD")
 # TF-IDF Configuration
 TFIDF_MODELS_DIR = os.getenv("TFIDF_MODELS_DIR", "/app/tfidf_models")
-
 
 # Initialize MCP Server
 mcp = FastMCP(
@@ -138,58 +138,78 @@ async def perform_hybrid_search(query: str,
 
     all_results = []
 
-    for collection_id in collection_ids:
+    async def search_collection_parallel(collection_id: str):
+        """Helper function to perform parallel dense and sparse search for a single collection."""
         logger.debug(f"Processing collection: {collection_id}")
 
-        # Dense search
-        dense_results = dense_search_service.search_collection(
-            query_embedding=query_embedding,
-            collection_id=collection_id,
-            user_id=user_id,
-            limit=limit * 2  # Get more for better fusion
-        )
+        # Prepare sparse search coroutine
+        async def perform_sparse_search():
+            sparse_results = []
+            sparse_vector = tfidf_service.query_to_sparse_vector(query, collection_id)
 
-        # Sparse search
-        sparse_results = []
-        sparse_vector = tfidf_service.query_to_sparse_vector(query, collection_id)
+            if sparse_vector and sparse_vector.indices:
+                try:
+                    from qdrant_client.models import NamedSparseVector
+                    sparse_results = qdrant_client.search(
+                        collection_name=collection_id,
+                        query_vector=NamedSparseVector(name="text_sparse", vector=sparse_vector),
+                        query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
+                        limit=limit * 2
+                    )
+                    logger.debug(f"Sparse search found {len(sparse_results)} results in {collection_id}")
+                except Exception as e:
+                    logger.warning(f"Sparse search failed for {collection_id}: {e}")
+                    sparse_results = []
+            else:
+                logger.debug(f"No sparse vector available for {collection_id}")
 
-        if sparse_vector and sparse_vector.indices:
-            try:
-                from qdrant_client.models import NamedSparseVector
-                sparse_results = qdrant_client.search(
-                    collection_name=collection_id,
-                    query_vector=NamedSparseVector(name="text_sparse", vector=sparse_vector),
-                    query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
-                    limit=limit * 2
-                )
-                logger.debug(f"Sparse search found {len(sparse_results)} results in {collection_id}")
-            except Exception as e:
-                logger.warning(f"Sparse search failed for {collection_id}: {e}")
-                sparse_results = []
-        else:
-            logger.debug(f"No sparse vector available for {collection_id}")
+            return sparse_results
 
-        if sparse_results:
-            norm_method = NormalizationMethod(normalization)
-            fuse_method = FusionMethod(fusion_method)
 
-            collection_results = fusion_service.fuse_dense_sparse(
-                dense_results=dense_results,
-                sparse_results=sparse_results,
-                dense_weight=dense_weight,
-                method=fuse_method,
-                normalization=norm_method
+        async def perform_dense_search():
+            return dense_search_service.search_collection(
+                query_embedding=query_embedding,
+                collection_id=collection_id,
+                user_id=user_id,
+                limit=limit * 2
             )
-        else:
-            collection_results = dense_results
 
-        # Tag with collection ID
-        for result in collection_results:
-            result._collection_id = collection_id
+        try:
+            dense_results, sparse_results = await asyncio.gather(
+                perform_dense_search(),
+                perform_sparse_search()
+            )
+            logger.info("Finished parallel dense and sparse search")
+            if sparse_results:
+                norm_method = NormalizationMethod(normalization)
+                fuse_method = FusionMethod(fusion_method)
 
+                collection_results = fusion_service.fuse_dense_sparse(
+                    dense_results=dense_results,
+                    sparse_results=sparse_results,
+                    dense_weight=dense_weight,
+                    method=fuse_method,
+                    normalization=norm_method
+                )
+            else:
+                collection_results = dense_results
+
+            # Tag with collection ID
+            for result in collection_results:
+                result._collection_id = collection_id
+
+            return collection_results
+        except Exception as e:
+            logger.info(f"Error parallel {e}")
+            return []
+
+    collection_results_list = await asyncio.gather(
+        *[search_collection_parallel(collection_id) for collection_id in collection_ids]
+    )
+
+    for collection_results in collection_results_list:
         all_results.extend(collection_results)
 
-    # Final ranking across all collections
     all_results.sort(key=lambda x: getattr(x, 'score', 0), reverse=True)
 
     logger.info(f"Hybrid search completed: {len(all_results)} total results")
@@ -263,7 +283,6 @@ async def perform_query_expansion_retrieval(query: str,
             normalization=normalization
         )
         results_by_query.append(query_results)
-
 
     fused_results = fusion_service.fuse_query_variants(results_by_query, method=EXPANSION_FUSION_METHOD)
 
