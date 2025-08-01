@@ -55,67 +55,6 @@ class TfidfService:
         logger.warning(f"No TF-IDF vectorizer found for collection {collection_id}")
         return None
 
-    def save_vectorizer(self, collection_id: str, vectorizer: TfidfVectorizer) -> bool:
-        """
-        Save TF-IDF vectorizer to disk.
-
-        Args:
-            collection_id: Unique collection identifier
-            vectorizer: Trained TF-IDF vectorizer
-
-        Returns:
-            True if saved successfully, False otherwise
-        """
-        try:
-            vectorizer_path = self.get_vectorizer_path(collection_id)
-            with open(vectorizer_path, 'wb') as f:
-                pickle.dump(vectorizer, f)
-
-            # Update cache
-            self.vectorizer_cache[collection_id] = vectorizer
-            logger.info(f"Saved TF-IDF vectorizer for {collection_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Error saving TF-IDF vectorizer for {collection_id}: {e}")
-            return False
-
-    def train_vectorizer(self, collection_id: str, texts: List[str]) -> Optional[TfidfVectorizer]:
-        """
-        Train new TF-IDF vectorizer on document corpus.
-
-        Args:
-            collection_id: Unique collection identifier
-            texts: List of document texts for training
-
-        Returns:
-            Trained TfidfVectorizer or None if training failed
-        """
-        if not texts:
-            logger.warning(f"No texts provided for training TF-IDF vectorizer for {collection_id}")
-            return None
-
-        try:
-            vectorizer = TfidfVectorizer(
-                stop_words='english',
-                max_features=10000,
-                min_df=1,
-                max_df=0.95,
-                ngram_range=(1, 2)  # Include bigrams for better keyword matching
-            )
-
-            vectorizer.fit(texts)
-
-            # Save the trained vectorizer
-            if self.save_vectorizer(collection_id, vectorizer):
-                logger.info(f"Trained TF-IDF vectorizer on {len(texts)} documents for {collection_id}")
-                return vectorizer
-            else:
-                logger.error(f"Failed to save trained vectorizer for {collection_id}")
-                return None
-
-        except Exception as e:
-            logger.error(f"Error training TF-IDF vectorizer for {collection_id}: {e}")
-            return None
 
     def query_to_sparse_vector(self, query: str, collection_id: str) -> Optional[SparseVector]:
         """
@@ -154,23 +93,3 @@ class TfidfService:
         except Exception as e:
             logger.error(f"Error converting query to sparse vector for {collection_id}: {e}")
             return None
-
-    def get_vocabulary_size(self, collection_id: str) -> int:
-        """Get size of vocabulary for a collection"""
-        vectorizer = self.load_vectorizer(collection_id)
-        if vectorizer and hasattr(vectorizer, 'vocabulary_'):
-            return len(vectorizer.vocabulary_)
-        return 0
-
-    def clear_cache(self):
-        """Clear vectorizer cache"""
-        self.vectorizer_cache.clear()
-        logger.info("Cleared TF-IDF vectorizer cache")
-
-    def get_cache_info(self) -> dict:
-        """Get information about cached vectorizers"""
-        return {
-            "cached_collections": list(self.vectorizer_cache.keys()),
-            "cache_size": len(self.vectorizer_cache),
-            "models_directory": self.models_dir
-        }

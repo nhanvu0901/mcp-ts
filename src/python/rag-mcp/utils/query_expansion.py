@@ -8,12 +8,8 @@ from langchain_openai import AzureChatOpenAI
 
 logger = logging.getLogger(__name__)
 
-
 ENABLE_QUERY_EXPANSION = os.getenv("ENABLE_QUERY_EXPANSION", "false").lower() == "true"
 MAX_QUERY_VARIANTS = int(os.getenv("MAX_QUERY_VARIANTS", "3"))
-EXPANSION_FUSION_METHOD = os.getenv("EXPANSION_FUSION_METHOD", "rrf")  # rrf, weighted, max_score
-EXPANSION_TEMPERATURE = float(os.getenv("EXPANSION_TEMPERATURE", "0.3"))
-EXPANSION_MAX_TOKENS = int(os.getenv("EXPANSION_MAX_TOKENS", "500"))
 
 expansion_metrics = {
     "queries_expanded": 0,
@@ -85,15 +81,15 @@ class QueryExpansionService:
         3. Be suitable for document retrieval
         4. Cover potential terminology variations
         5. Be concise and focused
-        
+
         Guidelines:
         - Use domain-appropriate synonyms (e.g., "revenue" → "income", "sales", "earnings")
         - Rephrase questions in different styles (direct vs analytical)
         - Consider both formal and informal terminology
         - Avoid overly complex or lengthy reformulations
-        
+
         Original query: "{original_query}"
-        
+
         Generate {max_variants} query variants, one per line, without numbering or bullets:"""
 
     def _parse_variants_response(self, response_text: str, original_query: str, max_variants: int) -> List[str]:
@@ -161,7 +157,7 @@ class ResultDeduplicator:
         # Primary identifier: document_id + chunk_id
         primary_id = f"{doc_id}_{chunk_id}"
 
-        # Fallback identifier: document_id + page_number  
+        # Fallback identifier: document_id + page_number
         fallback_id = f"{doc_id}_{page_number}"
 
         # Use primary if chunk_id exists, otherwise use fallback
@@ -206,187 +202,16 @@ class ResultDeduplicator:
         return deduplicated
 
 
-class ScoreFusionService:
-    """
-    Handles fusion of scores across query variants.
-
-    Implements multiple fusion strategies to combine retrieval results from
-    different query formulations into a unified ranked list.
-    """
-
-    @staticmethod
-    def reciprocal_rank_fusion(results_by_variant: List[List[Any]], k: int = 60) -> List[Tuple[Any, float]]:
-        """
-        Apply Reciprocal Rank Fusion across query variants.
-
-        RRF Score = Σ(1 / (rank_i + k)) for each variant where document appears
-
-        Args:
-            results_by_variant: List of result lists, one per query variant
-            k: RRF parameter (default 60, commonly used value)
-
-        Returns:
-            List of (result_object, fused_score) tuples sorted by score
-        """
-        # Create document to RRF score mapping
-        doc_scores = defaultdict(float)
-        doc_objects = {}
-
-        for variant_results in results_by_variant:
-            for rank, result in enumerate(variant_results):
-                chunk_hash = ResultDeduplicator.create_chunk_hash(result)
-                rrf_score = 1.0 / (rank + 1 + k)
-                doc_scores[chunk_hash] += rrf_score
-                doc_objects[chunk_hash] = result
-
-        # Convert to list and sort by RRF score
-        fused_results = [(doc_objects[doc_hash], score)
-                         for doc_hash, score in doc_scores.items()]
-        fused_results.sort(key=lambda x: x[1], reverse=True)
-
-        logger.debug(f"RRF fusion: {len(fused_results)} unique documents across {len(results_by_variant)} variants")
-        return fused_results
-
-    @staticmethod
-    def weighted_score_fusion(results_by_variant: List[List[Any]],
-                              variant_weights: Optional[List[float]] = None) -> List[Tuple[Any, float]]:
-        """
-        Apply weighted score fusion across query variants.
-
-        Final Score = Σ(weight_i × normalized_score_i) for each variant
-
-        Args:
-            results_by_variant: List of result lists, one per query variant
-            variant_weights: Weights for each variant (default: equal weights)
-
-        Returns:
-            List of (result_object, fused_score) tuples sorted by score
-        """
-        if variant_weights is None:
-            variant_weights = [1.0] * len(results_by_variant)
-
-        # Normalize scores within each variant
-        normalized_variants = []
-        for variant_results in results_by_variant:
-            if not variant_results:
-                normalized_variants.append([])
-                continue
-
-            scores = [r.score for r in variant_results]
-            max_score = max(scores) if scores else 1.0
-            min_score = min(scores) if scores else 0.0
-            score_range = max_score - min_score if max_score != min_score else 1.0
-
-            normalized_results = []
-            for result in variant_results:
-                normalized_score = (result.score - min_score) / score_range
-                normalized_results.append((result, normalized_score))
-
-            normalized_variants.append(normalized_results)
-
-        doc_scores = defaultdict(float)
-        doc_objects = {}
-
-        for variant_idx, variant_results in enumerate(normalized_variants):
-            weight = variant_weights[variant_idx]
-            for result, normalized_score in variant_results:
-                chunk_hash = ResultDeduplicator.create_chunk_hash(result)
-                doc_scores[chunk_hash] += weight * normalized_score
-                doc_objects[chunk_hash] = result
-
-        fused_results = [(doc_objects[doc_hash], score)
-                         for doc_hash, score in doc_scores.items()]
-        fused_results.sort(key=lambda x: x[1], reverse=True)
-
-        logger.debug(f"Weighted fusion: {len(fused_results)} unique documents with weights {variant_weights}")
-        return fused_results
-
-    @staticmethod
-    def max_score_fusion(results_by_variant: List[List[Any]]) -> List[Tuple[Any, float]]:
-        """
-        Apply max score fusion - take highest score for each document across variants.
-
-        Args:
-            results_by_variant: List of result lists, one per query variant
-
-        Returns:
-            List of (result_object, max_score) tuples sorted by score
-        """
-        doc_scores = {}
-        doc_objects = {}
-
-        for variant_results in results_by_variant:
-            for result in variant_results:
-                chunk_hash = ResultDeduplicator.create_chunk_hash(result)
-                if chunk_hash not in doc_scores or result.score > doc_scores[chunk_hash]:
-                    doc_scores[chunk_hash] = result.score
-                    doc_objects[chunk_hash] = result
-
-        # Convert to list and sort
-        fused_results = [(doc_objects[doc_hash], score)
-                         for doc_hash, score in doc_scores.items()]
-        fused_results.sort(key=lambda x: x[1], reverse=True)
-
-        logger.debug(f"Max score fusion: {len(fused_results)} unique documents")
-        return fused_results
-
-    @staticmethod
-    def apply_fusion(results_by_variant: List[List[Any]],
-                     method: str = None,
-                     variant_weights: Optional[List[float]] = None) -> List[Tuple[Any, float]]:
-        """
-        Apply the specified fusion method to results across variants.
-
-        Args:
-            results_by_variant: List of result lists, one per query variant
-            method: Fusion method ("rrf", "weighted", "max_score")
-            variant_weights: Weights for weighted fusion
-
-        Returns:
-            List of (result_object, fused_score) tuples sorted by score
-        """
-        if method is None:
-            method = EXPANSION_FUSION_METHOD
-
-        # Update metrics
-        expansion_metrics["fusion_method_usage"][method] += 1
-
-        logger.info(f"Applying {method} fusion across {len(results_by_variant)} query variants")
-
-        if method == "rrf":
-            return ScoreFusionService.reciprocal_rank_fusion(results_by_variant)
-        elif method == "weighted":
-            return ScoreFusionService.weighted_score_fusion(results_by_variant, variant_weights)
-        elif method == "max_score":
-            return ScoreFusionService.max_score_fusion(results_by_variant)
-        else:
-            logger.warning(f"Unknown fusion method: {method}, using RRF")
-            return ScoreFusionService.reciprocal_rank_fusion(results_by_variant)
-
-
-def get_expansion_config() -> Dict[str, Any]:
-    """Get current query expansion configuration."""
-    return {
-        "enabled": ENABLE_QUERY_EXPANSION,
-        "max_variants": MAX_QUERY_VARIANTS,
-        "fusion_method": EXPANSION_FUSION_METHOD,
-        "temperature": EXPANSION_TEMPERATURE,
-        "max_tokens": EXPANSION_MAX_TOKENS
-    }
-
 
 def get_expansion_metrics() -> Dict[str, Any]:
-    """Get query expansion performance metrics."""
-    config = get_expansion_config()
 
     # Calculate derived metrics
     total_queries = expansion_metrics["queries_expanded"]
     success_rate = (expansion_metrics["successful_expansions"] / total_queries * 100) if total_queries > 0 else 0
     avg_variants_per_query = (expansion_metrics["variants_generated"] / expansion_metrics["successful_expansions"]) if \
-    expansion_metrics["successful_expansions"] > 0 else 0
+        expansion_metrics["successful_expansions"] > 0 else 0
 
     return {
-        "configuration": config,
         "performance_metrics": {
             **dict(expansion_metrics),
             "success_rate_percent": round(success_rate, 2),

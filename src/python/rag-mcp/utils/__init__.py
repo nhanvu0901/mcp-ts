@@ -1,39 +1,41 @@
 from .query_expansion import (
     QueryExpansionService,
     ResultDeduplicator,
-    ScoreFusionService,
-    get_expansion_config,
     get_expansion_metrics,
     reset_expansion_metrics,
     ENABLE_QUERY_EXPANSION,
     MAX_QUERY_VARIANTS,
-    EXPANSION_FUSION_METHOD
 )
 
 from .tfidf_search import TfidfService
 from .dense_search import DenseSearchService
-from .search_fusion_service import (
-    SearchFusionService,
+from .fusion_score import (
+    FusionService,
     NormalizationMethod,
-    FusionMethod
+    FusionMethod,
+    fuse_dense_sparse_results,
+    fuse_query_variant_results,
+    default_fusion_service
 )
 
 __all__ = [
     # Query Expansion
     'QueryExpansionService',
     'ResultDeduplicator',
-    'ScoreFusionService',
-    'get_expansion_config',
     'get_expansion_metrics',
     'reset_expansion_metrics',
     'ENABLE_QUERY_EXPANSION',
     'MAX_QUERY_VARIANTS',
-    'EXPANSION_FUSION_METHOD',
 
+    # Search Services
     'TfidfService',
     'DenseSearchService',
-    'SearchFusionService',
 
+    # Fusion Services
+    'FusionService',
     'NormalizationMethod',
-    'FusionMethod'
+    'FusionMethod',
+    'fuse_dense_sparse_results',
+    'fuse_query_variant_results',
+    'default_fusion_service'
 ]

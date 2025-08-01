@@ -9,10 +9,9 @@ from typing import List, Any
 # Import new utility services
 from utils.tfidf_search import TfidfService
 from utils.dense_search import DenseSearchService
-from utils.search_fusion_service import SearchFusionService, FusionMethod, NormalizationMethod
+from utils.fusion_score import FusionService, FusionMethod, NormalizationMethod
 from utils.query_expansion import (
     QueryExpansionService,
-    ScoreFusionService,
     ENABLE_QUERY_EXPANSION,
 )
 
@@ -33,15 +32,10 @@ DEFAULT_NORMALIZATION ="min_max"
 DEFAULT_FUSION_METHOD = "weighted"
 SIMILARITY_THRESHOLD = "0.0"
 
+EXPANSION_FUSION_METHOD = os.getenv("EXPANSION_FUSION_METHOD")
 # TF-IDF Configuration
 TFIDF_MODELS_DIR = os.getenv("TFIDF_MODELS_DIR", "/app/tfidf_models")
 
-logger.info(f"RAG Service Configuration:")
-logger.info(f"  - Dense Weight: {DEFAULT_DENSE_WEIGHT}")
-logger.info(f"  - Default Search Type: {DEFAULT_SEARCH_TYPE}")
-logger.info(f"  - Normalization Method: {DEFAULT_NORMALIZATION}")
-logger.info(f"  - Fusion Method: {DEFAULT_FUSION_METHOD}")
-logger.info(f"  - Query Expansion: {ENABLE_QUERY_EXPANSION}")
 
 # Initialize MCP Server
 mcp = FastMCP(
@@ -72,7 +66,7 @@ llm_client = AzureChatOpenAI(
 # Initialize service classes
 tfidf_service = TfidfService(models_dir=TFIDF_MODELS_DIR)
 dense_search_service = DenseSearchService(embedding_model, qdrant_client)
-fusion_service = SearchFusionService(default_dense_weight=DEFAULT_DENSE_WEIGHT)
+fusion_service = FusionService(default_dense_weight=DEFAULT_DENSE_WEIGHT)
 query_expansion_service = QueryExpansionService(llm_client)
 
 
@@ -179,11 +173,11 @@ async def perform_hybrid_search(query: str,
             norm_method = NormalizationMethod(normalization)
             fuse_method = FusionMethod(fusion_method)
 
-            collection_results = fusion_service.fuse_results(
+            collection_results = fusion_service.fuse_dense_sparse(
                 dense_results=dense_results,
                 sparse_results=sparse_results,
-                method=fuse_method,
                 dense_weight=dense_weight,
+                method=fuse_method,
                 normalization=norm_method
             )
         else:
@@ -270,8 +264,8 @@ async def perform_query_expansion_retrieval(query: str,
         )
         results_by_query.append(query_results)
 
-    # Apply fusion to combine results from all variants
-    fused_results = ScoreFusionService.apply_fusion(results_by_query)
+
+    fused_results = fusion_service.fuse_query_variants(results_by_query, method=EXPANSION_FUSION_METHOD)
 
     # Take top results and convert back to expected format
     top_results = [result for result, score in fused_results[:limit]]
@@ -285,10 +279,10 @@ async def retrieve(query: str,
                    user_id: str,
                    collection_id: List[str],
                    limit: int = 5,
-                   search_type: str = None,
-                   dense_weight: float = None,
-                   normalization: str = None,
-                   fusion_method: str = None) -> str:
+                   search_type: str = DEFAULT_SEARCH_TYPE,
+                   dense_weight: float = DEFAULT_DENSE_WEIGHT,
+                   normalization: str = DEFAULT_NORMALIZATION,
+                   fusion_method: str = DEFAULT_FUSION_METHOD) -> str:
     """
     Search and retrieve relevant document chunks with configurable search methods.
 
@@ -309,17 +303,6 @@ async def retrieve(query: str,
         # Validate inputs
         if not isinstance(collection_id, list) or not all(isinstance(cid, str) for cid in collection_id):
             return f"Invalid collection_id type: expected list of strings, got {type(collection_id)}: {collection_id!r}"
-
-        # Use defaults if not provided
-        if search_type is None:
-            search_type = DEFAULT_SEARCH_TYPE
-        if dense_weight is None:
-            dense_weight = DEFAULT_DENSE_WEIGHT
-        if normalization is None:
-            normalization = DEFAULT_NORMALIZATION
-        if fusion_method is None:
-            fusion_method = DEFAULT_FUSION_METHOD
-
         logger.info(f"Starting {search_type} search for query: '{query}' in {len(collection_id)} collections")
 
         # Check if query expansion is enabled
@@ -340,25 +323,12 @@ async def retrieve(query: str,
                 normalization=normalization,
                 fusion_method=fusion_method
             )
-
-        elif search_type == "dense":
+        else:
             results = await perform_dense_only_search(
                 query=query,
                 collection_ids=collection_id,
                 user_id=user_id,
                 limit=limit
-            )
-
-        else:
-            logger.warning(f"Unsupported search_type '{search_type}', falling back to hybrid")
-            results = await perform_hybrid_search(
-                query=query,
-                collection_ids=collection_id,
-                user_id=user_id,
-                limit=limit,
-                dense_weight=dense_weight,
-                normalization=normalization,
-                fusion_method=fusion_method
             )
 
         # Apply similarity threshold if configured
@@ -387,29 +357,29 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
     return await retrieve(query, user_id, collection_id, limit, "dense")
 
 
-@mcp.tool()
-async def retrieve_hybrid(query: str,
-                          user_id: str,
-                          collection_id: List[str],
-                          limit: int = 5,
-                          dense_weight: float = None,
-                          normalization: str = None,
-                          fusion_method: str = None) -> str:
-    """
-    Query using hybrid search (dense + sparse vectors).
-
-    Args:
-        query: Text query to search for
-        user_id: User ID to filter documents
-        collection_id: List of collection IDs
-        limit: Maximum number of results to return
-        dense_weight: Weight for dense search (0.0-1.0)
-        normalization: Score normalization method
-
-    Returns:
-        Formatted text with inline citations
-    """
-    return await retrieve(query, user_id, collection_id, limit, "hybrid", dense_weight, normalization)
+# @mcp.tool()
+# async def retrieve_hybrid(query: str,
+#                           user_id: str,
+#                           collection_id: List[str],
+#                           limit: int = 5,
+#                           dense_weight: float = None,
+#                           normalization: str = None,
+#                           fusion_method: str = None) -> str:
+#     """
+#     Query using hybrid search (dense + sparse vectors).
+#
+#     Args:
+#         query: Text query to search for
+#         user_id: User ID to filter documents
+#         collection_id: List of collection IDs
+#         limit: Maximum number of results to return
+#         dense_weight: Weight for dense search (0.0-1.0)
+#         normalization: Score normalization method
+#
+#     Returns:
+#         Formatted text with inline citations
+#     """
+#     return await retrieve(query, user_id, collection_id, limit, "hybrid", dense_weight, normalization)
 
 
 if __name__ == "__main__":
