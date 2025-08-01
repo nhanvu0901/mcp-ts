@@ -10,7 +10,16 @@ from .query_expansion import (
     EXPANSION_FUSION_METHOD
 )
 
+from .tfidf_search import TfidfService
+from .dense_search import DenseSearchService
+from .search_fusion_service import (
+    SearchFusionService,
+    NormalizationMethod,
+    FusionMethod
+)
+
 __all__ = [
+    # Query Expansion
     'QueryExpansionService',
     'ResultDeduplicator',
     'ScoreFusionService',
@@ -19,5 +28,12 @@ __all__ = [
     'reset_expansion_metrics',
     'ENABLE_QUERY_EXPANSION',
     'MAX_QUERY_VARIANTS',
-    'EXPANSION_FUSION_METHOD'
+    'EXPANSION_FUSION_METHOD',
+
+    'TfidfService',
+    'DenseSearchService',
+    'SearchFusionService',
+
+    'NormalizationMethod',
+    'FusionMethod'
 ]

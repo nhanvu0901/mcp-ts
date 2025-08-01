@@ -271,20 +271,22 @@ When using DocumentTranslationService:
 - Format the translation clearly and readably
 
 **Citation Rules (Only when using document tools):**
-RAGService returns text with "SOURCE_CITATION: \\\\cite{document_name, page/chunk number}". You MUST:
+RAGService returns text with "SOURCE_CITATION: \\cite{document_name, page/chunk number}". You MUST:
 1. Preserve exact "SOURCE_CITATION:" prefix format
 2. Place citations immediately after supported claims
 3. DO NOT group citations at end
 4. Each claim needs its citation right after
-5. **Use SINGULAR "page" or "chunk" with ONE number only**
-6. **For multiple sources: create separate individual citations**
 
-**Example with Citations:**
-Simple reflex agents act based on current percepts. SOURCE_CITATION: \\\\cite{ai agent.pdf, page 1} Model-based agents maintain internal state. SOURCE_CITATION: \\\\cite{ai agent.pdf, page 2}
+**CORRECT - Citations immediately after each supported sentence:**
+An AI agent is an entity that perceives its environment through sensors and acts upon it using effectors. SOURCE_CITATION: \\\\\\\\cite{ai agent.pdf, page 1} These agents are designed to operate autonomously and make decisions. SOURCE_CITATION: \\\\\\\\cite{ai agent.pdf, page 1} Key characteristics include autonomy, learning, and adaptability. SOURCE_CITATION: \\\\\\\\cite{ai agent.pdf, page 2}
 
-**WRONG:** SOURCE_CITATION: \\\\cite{mcp.md, chunks 0, 3, 5}
-**CORRECT:** SOURCE_CITATION: \\\\cite{mcp.md, chunk 0} SOURCE_CITATION: \\\\cite{mcp.md, chunk 3} SOURCE_CITATION: \\\\cite{mcp.md, chunk 5}
+**WRONG - All citations grouped at the end:**
+An AI agent is an entity that perceives its environment through sensors and acts upon it using effectors. These agents are designed to operate autonomously and make decisions. Key characteristics include autonomy, learning, and adaptability. SOURCE_CITATION: \\\\\\\\cite{ai agent.pdf, page 1} SOURCE_CITATION: \\\\\\\\cite{ai agent.pdf, page 1} SOURCE_CITATION: \\\\\\\\cite{ai agent.pdf, page 2}
 
+**WRONG - Citations grouped at paragraph end:**
+An AI agent is an entity that perceives its environment. These agents operate autonomously. They have key characteristics like learning and adaptability. SOURCE_CITATION: \\\\\\\\cite{ai agent.pdf, page 1} SOURCE_CITATION: \\\\\\\\cite{ai agent.pdf, page 2}
+
+**Remember: Every sentence containing document information must have its citation placed immediately after that specific sentence.**
 **Example without Document Context:**
 When Has Document Context is false, respond naturally:
 "I'd be happy to help you with that question! Based on my knowledge, [provide helpful response]. Is there anything specific you'd like me to explain further?"

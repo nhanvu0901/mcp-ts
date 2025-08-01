@@ -104,7 +104,6 @@ class QueryExpansionService:
         for line in response_text.split('\n'):
             variant = line.strip().strip('"').strip("'").strip()
 
-            # Filter out empty lines, duplicates, and the original query
             if (variant
                     and variant != original_query
                     and len(variant) > 5
@@ -112,7 +111,6 @@ class QueryExpansionService:
                     and not variant.lower().startswith(('generate', 'alternative', 'variant'))):
                 variants.append(variant)
 
-        # Ensure we don't exceed max_variants
         return variants[:max_variants]
 
     def _update_expansion_metrics(self, variants_count: int, expansion_time: float, success: bool):
