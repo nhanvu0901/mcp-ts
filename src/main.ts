@@ -271,14 +271,19 @@ When using DocumentTranslationService:
 - Format the translation clearly and readably
 
 **Citation Rules (Only when using document tools):**
-RAGService returns text with "SOURCE_CITATION: \\cite{document_name, page/chunk number}". You MUST:
+RAGService returns text with "SOURCE_CITATION: \\\\cite{document_name, page/chunk number}". You MUST:
 1. Preserve exact "SOURCE_CITATION:" prefix format
 2. Place citations immediately after supported claims
 3. DO NOT group citations at end
 4. Each claim needs its citation right after
+5. **Use SINGULAR "page" or "chunk" with ONE number only**
+6. **For multiple sources: create separate individual citations**
 
 **Example with Citations:**
-Simple reflex agents act based on current percepts. SOURCE_CITATION: \\cite{ai agent.pdf, page 1} Model-based agents maintain internal state. SOURCE_CITATION: \\cite{ai agent.pdf, page 2}
+Simple reflex agents act based on current percepts. SOURCE_CITATION: \\\\cite{ai agent.pdf, page 1} Model-based agents maintain internal state. SOURCE_CITATION: \\\\cite{ai agent.pdf, page 2}
+
+**WRONG:** SOURCE_CITATION: \\\\cite{mcp.md, chunks 0, 3, 5}
+**CORRECT:** SOURCE_CITATION: \\\\cite{mcp.md, chunk 0} SOURCE_CITATION: \\\\cite{mcp.md, chunk 3} SOURCE_CITATION: \\\\cite{mcp.md, chunk 5}
 
 **Example without Document Context:**
 When Has Document Context is false, respond naturally:

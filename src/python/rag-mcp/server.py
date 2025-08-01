@@ -9,13 +9,10 @@ from scipy.sparse import csr_matrix
 import numpy as np
 import pickle
 import logging
-import asyncio
 from typing import List, Dict, Any
 
-# Add query expansion imports
 from utils.query_expansion import (
     QueryExpansionService,
-    ResultDeduplicator,
     ScoreFusionService,
     ENABLE_QUERY_EXPANSION,
     get_expansion_metrics

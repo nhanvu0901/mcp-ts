@@ -77,6 +77,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb
 
 # IPython
 profile_default/
@@ -346,6 +347,7 @@ uploads/
 data/uploads/
 # New location in Python folder
 src/python/data/uploads/
+src/python/data/tfidf_models
 my_venv/
 
 package-lock.json

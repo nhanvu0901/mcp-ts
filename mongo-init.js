@@ -15,15 +15,15 @@ db.createCollection('documents');
 db.createCollection('chat_memory');
 db.createCollection('chat_summaries');
 
-// Create indexes for better performance
-db.chat_summaries.createIndex({ sessionId: 1, summaryIndex: 1 }, { unique: true });
-db.chat_summaries.createIndex({ sessionId: 1, createdAt: -1 });
-db.chat_summaries.createIndex({ createdAt: 1 }, { expireAfterSeconds: 2592000 }); // 30 days TTL
-
-db.chat_memory.createIndex({ SessionId: 1 });
+// Create indexes for chat_memory collection
+db.chat_memory.createIndex({ SessionId: 1 }, { unique: true });
+db.chat_memory.createIndex({ user_id: 1, UpdatedAt: -1 });
+db.chat_memory.createIndex({ "collection_id": 1 });
+db.chat_memory.createIndex({ user_id: 1, "collection_id": 1 });
+db.chat_memory.createIndex({ UpdatedAt: -1 });
 db.chat_memory.createIndex({ CreatedAt: -1 });
 
 // Create indexes for documents collection
-db.documents.createIndex({ user_id: 1, upload_date: -1 }, { name: "user_upload_date_idx" });
-db.documents.createIndex({ user_id: 1, normalized_name: 1 }, { name: "user_normalized_name_idx" });
-db.documents.createIndex({ user_id: 1, collection_id: 1 }, { name: "user_collection_idx" });
+db.documents.createIndex({ user_id: 1, upload_date: -1 });
+db.documents.createIndex({ user_id: 1, normalized_name: 1 });
+db.documents.createIndex({ user_id: 1, collection_id: 1 });

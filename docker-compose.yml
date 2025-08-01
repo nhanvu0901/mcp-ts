@@ -18,16 +18,74 @@ services:
   #      DOCUMENT_MCP_URL: http://document-service:8001/sse
   #      RAG_MCP_URL: http://rag-service:8002/sse
   #      DOCDB_SUMMARIZATION_MCP_URL: http://docdb-service:8003/sse
+  #      QDRANT_HOST: qdrant
+  #      QDRANT_PORT: 6333
   #      MAX_FILE_SIZE: 10485760
   #      UPLOAD_DIR: /app/data/uploads
   #      DEFAULT_COLLECTION_NAME: RAG
   #    depends_on:
   #      - mongodb
   #      - qdrant
-  #      - document-service
+  #      - python-services
   #    networks:
   #      - mcp-network
-  #
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: mcp-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm_user
+      POSTGRES_PASSWORD: litellm_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mcp-network
+
+    # LiteLLM Proxy with PostgreSQL
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: mcp-litellm-proxy
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      # PostgreSQL database for LiteLLM
+      DATABASE_URL: "postgresql://litellm_user:litellm_password@postgres:5432/litellm"
+
+      # Enable database features
+      STORE_MODEL_IN_DB: "True"
+      DISABLE_DATABASE: "False"
+
+      # LiteLLM configuration
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      LITELLM_APP_KEY: ${LITELLM_APP_KEY}
+      LITELLM_LOG: ${LITELLM_LOG}
+
+      # Azure OpenAI credentials for environment variable substitution
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      AZURE_OPENAI_MODEL_API_VERSION: ${AZURE_OPENAI_MODEL_API_VERSION}
+      AZURE_OPENAI_EMBEDDING_API_KEY: ${AZURE_OPENAI_EMBEDDING_API_KEY}
+      AZURE_OPENAI_EMBEDDING_ENDPOINT: ${AZURE_OPENAI_EMBEDDING_ENDPOINT}
+      AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION: ${AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION}
+
+      LITELLM_UI: ${LITELLM_UI}
+      LITELLM_DEBUG: ${LITELLM_DEBUG}
+      #LITELLM_DEFAULT_MODEL: ${LITELLM_DEFAULT_MODEL}
+
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml:ro
+    depends_on:
+      - postgres
+    command: [ "--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1" ]
+    networks:
+      - mcp-network
   python-services:
     build:
       context: ./src/python
@@ -52,10 +110,17 @@ services:
       MONGODB_DB:  ${MONGODB_DB}
       QDRANT_HOST:  ${QDRANT_HOST}
       QDRANT_PORT:  ${QDRANT_PORT}
-
+      ENABLE_QUERY_EXPANSION: ${ENABLE_QUERY_EXPANSION}
+      MAX_QUERY_VARIANTS: ${MAX_QUERY_VARIANTS}
+      EXPANSION_FUSION_METHOD: ${EXPANSION_FUSION_METHOD}
+      EXPANSION_TEMPERATURE: ${EXPANSION_TEMPERATURE}
+    volumes:
+      - ./src/python/data/tfidf_models:/app/tfidf_models:rw
     depends_on:
-      - mongodb
-      - qdrant
+      mongodb:
+        condition: service_started
+      qdrant:
+        condition: service_started
     networks:
       - mcp-network
 
@@ -89,6 +154,7 @@ services:
 volumes:
   mongodb_data:
   qdrant_data:
+  postgres_data:
 
 networks:
   mcp-network:

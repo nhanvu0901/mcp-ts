@@ -71,7 +71,7 @@ export class AskAgentController {
                 docId,
                 sessionId
             );
-            console.warn('Starting to extract source');
+
             const sourceReferences = AgentUtils.extractSourceReferences(result.aiResponse, result.ragResponse);
 
             return reply.send({
