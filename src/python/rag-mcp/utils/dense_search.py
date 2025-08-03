@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import List, Any, Optional
 from langchain_openai import AzureOpenAIEmbeddings
@@ -67,6 +68,49 @@ class DenseSearchService:
         except Exception as e:
             logger.error(f"Error in dense search for collection {collection_id}: {e}")
             return []
+
+    async def search_parallel_multiple_collections(self,
+                                                   query_embedding: List[float],
+                                                   collection_ids: List[str],
+                                                   user_id: str,
+                                                   limit: int = 10) -> List[Any]:
+        try:
+            async def process_search_multiple_collections(
+                                                            query_embedding: List[float],
+                                                            collection_id: str,
+                                                            user_id: str,
+                                                            limit: int = 10):
+                try:
+                    results = self.search_collection(
+                        query_embedding=query_embedding,
+                        collection_id=collection_id,
+                        user_id=user_id,
+                        limit=limit
+                    )
+                    # Tag results with collection ID for tracking
+                    for result in results:
+                        result._collection_id = collection_id
+                    return result
+                except Exception as e:
+                    logger.error(f"Error in process parrallel collection {e}")
+                    return []
+
+
+            collection_results_list = await asyncio.gather(
+                *[process_search_multiple_collections(
+                    query_embedding,
+                    collection_id,
+                    user_id,
+                    limit
+                ) for collection_id in collection_ids]
+            )
+            collection_results_list.sort(key=lambda x: getattr(x, 'score', 0), reverse=True)
+            return collection_results_list
+        except Exception as e:
+            logger.error(f"Error in search parrallel collection {e}")
+            return []
+
+
 
     async def search_multiple_collections(self,
                                           query: str,
