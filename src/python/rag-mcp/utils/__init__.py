@@ -13,9 +13,6 @@ from .fusion_score import (
     FusionService,
     NormalizationMethod,
     FusionMethod,
-    fuse_dense_sparse_results,
-    fuse_query_variant_results,
-    default_fusion_service
 )
 
 __all__ = [
@@ -35,7 +32,4 @@ __all__ = [
     'FusionService',
     'NormalizationMethod',
     'FusionMethod',
-    'fuse_dense_sparse_results',
-    'fuse_query_variant_results',
-    'default_fusion_service'
 ]

@@ -234,7 +234,7 @@ async def perform_dense_only_search(query: str,
     """
     logger.info(f"Dense-only search: query='{query}', collections={len(collection_ids)}")
 
-    results = await dense_search_service.search_multiple_collections(
+    results = await dense_search_service.search_parallel_multiple_collections(
         query=query,
         collection_ids=collection_ids,
         user_id=user_id,

@@ -344,28 +344,3 @@ class FusionService:
 
         # Convert to (result, score) tuples for compatibility
         return [(result, result.score) for result in fused_results]
-
-
-# Global instance for backward compatibility
-default_fusion_service = FusionService()
-
-
-# Convenience functions for backward compatibility
-def fuse_dense_sparse_results(dense_results: List[Any],
-                              sparse_results: List[Any],
-                              dense_weight: float = 0.6,
-                              method: FusionMethod = FusionMethod.WEIGHTED,
-                              normalization: NormalizationMethod = NormalizationMethod.MIN_MAX) -> List[Any]:
-    """Convenience function for dense+sparse fusion."""
-    return default_fusion_service.fuse_dense_sparse(
-        dense_results, sparse_results, dense_weight, method, normalization
-    )
-
-
-def fuse_query_variant_results(results_by_variant: List[List[Any]],
-                               method: str = "rrf",
-                               variant_weights: Optional[List[float]] = None) -> List[Tuple[Any, float]]:
-    """Convenience function for query variant fusion."""
-    return default_fusion_service.fuse_query_variants(
-        results_by_variant, method, variant_weights
-    )
