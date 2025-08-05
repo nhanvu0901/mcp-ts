@@ -11,10 +11,6 @@ logger = logging.getLogger(__name__)
 class NormalizationMethod(Enum):
     """Supported score normalization methods"""
     MIN_MAX = "min_max"
-    Z_SCORE = "z_score"
-    RECIPROCAL_RANK = "reciprocal_rank"
-    NONE = "none"
-
 
 class FusionMethod(Enum):
     """Supported fusion methods"""
@@ -35,8 +31,7 @@ class FusionService:
     def __init__(self, default_dense_weight: float = 0.6):
         self.default_dense_weight = default_dense_weight
 
-    def normalize_scores(self, scores: List[float], method: NormalizationMethod = NormalizationMethod.MIN_MAX) -> List[
-        float]:
+    def normalize_scores(self, scores: List[float], method: NormalizationMethod = NormalizationMethod.MIN_MAX) -> List[float]:
         """
         Normalize scores using specified method.
 
@@ -56,19 +51,6 @@ class FusionService:
             if scores_array.max() == scores_array.min():
                 return [1.0] * len(scores)
             return ((scores_array - scores_array.min()) / (scores_array.max() - scores_array.min())).tolist()
-
-        elif method == NormalizationMethod.Z_SCORE:
-            if scores_array.std() == 0:
-                return [1.0] * len(scores)
-            return ((scores_array - scores_array.mean()) / scores_array.std()).tolist()
-
-        elif method == NormalizationMethod.RECIPROCAL_RANK:
-            ranks = np.argsort(np.argsort(-scores_array)) + 1
-            return (1.0 / ranks).tolist()
-
-        elif method == NormalizationMethod.NONE:
-            return scores
-
         else:
             logger.warning(f"Unknown normalization method: {method}, using min-max")
             return self.normalize_scores(scores, NormalizationMethod.MIN_MAX)
@@ -198,44 +180,7 @@ class FusionService:
         logger.debug(f"RRF fusion: {sum(len(g) for g in result_groups)} → {len(final_results)} results")
         return final_results
 
-    def max_score_fusion(self, result_groups: List[List[Any]]) -> List[Any]:
-        """
-        Combine result groups by taking maximum score for each document.
 
-        Args:
-            result_groups: List of result lists to combine
-
-        Returns:
-            Combined results with max scores
-        """
-        if not result_groups or not any(result_groups):
-            return []
-
-        # Create score and result mappings
-        max_scores = {}
-        result_objects = {}
-
-        for results in result_groups:
-            for result in results:
-                result_hash = self.create_result_hash(result)
-                score = getattr(result, 'score', 0)
-
-                if result_hash not in max_scores or score > max_scores[result_hash]:
-                    max_scores[result_hash] = score
-                    result_objects[result_hash] = result
-
-        # Create final results
-        final_results = []
-        for result_hash, max_score in max_scores.items():
-            result_obj = result_objects[result_hash]
-            result_obj.score = max_score
-            final_results.append(result_obj)
-
-        # Sort by max score descending
-        final_results.sort(key=lambda x: x.score, reverse=True)
-
-        logger.debug(f"Max score fusion: {sum(len(g) for g in result_groups)} → {len(final_results)} results")
-        return final_results
 
     def fuse_results(self,
                      result_groups: List[List[Any]],
@@ -262,10 +207,6 @@ class FusionService:
         elif method == FusionMethod.RRF:
             k = kwargs.get('rrf_k', 60)
             return self.reciprocal_rank_fusion(result_groups, k)
-
-        elif method == FusionMethod.MAX_SCORE:
-            return self.max_score_fusion(result_groups)
-
         else:
             logger.warning(f"Unknown fusion method: {method}, using weighted fusion")
             return self.weighted_fusion(result_groups, weights, normalization)

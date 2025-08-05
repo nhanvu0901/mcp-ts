@@ -23,16 +23,17 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 # Environment Configuration
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+QDRANT_HOST = "localhost"
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 
 # Search Configuration
 DEFAULT_DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.6"))
 DEFAULT_SEARCH_TYPE = "hybrid"
-DEFAULT_NORMALIZATION = "min_max"
+
 DEFAULT_FUSION_METHOD = "weighted"
 SIMILARITY_THRESHOLD = "0.0"
 
+DEFAULT_NORMALIZATION = "min_max"
 EXPANSION_FUSION_METHOD = os.getenv("EXPANSION_FUSION_METHOD")
 # TF-IDF Configuration
 TFIDF_MODELS_DIR = os.getenv("TFIDF_MODELS_DIR", "/app/tfidf_models")
@@ -403,5 +404,16 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
 
 if __name__ == "__main__":
     logger.info("RAG Service MCP server starting up...")
+
+    asyncio.run(perform_hybrid_search(
+            query="What is ai agent",
+            collection_ids=['79433835-c64d-4ac0-b143-6fdb018cdea5','aba7e48a-53a0-4d25-bab7-213b5ef75d1c','caa82a06-02c2-4dbd-8307-39e1acd8348a'],
+            user_id='nhan',
+            limit=10,
+            dense_weight=0.6,
+            normalization='min_max',
+            fusion_method='weighted'
+        ))
+
     mcp.run(transport="sse")
     logger.info("RAG Service MCP server shut down.")
