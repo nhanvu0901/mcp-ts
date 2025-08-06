@@ -12,11 +12,11 @@ from qdrant_client.models import (
 )
 from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse import csr_matrix
-from .config import DEFAULT_QDRANT_HOST, DEFAULT_QDRANT_PORT, VECTOR_SIZE
+from .config import QDRANT_HOST, DEFAULT_QDRANT_PORT, VECTOR_SIZE
 
 class QdrantService:
     def __init__(self, collection_name: str,
-                 qdrant_host: str = DEFAULT_QDRANT_HOST,
+                 qdrant_host: str = QDRANT_HOST,
                  qdrant_port: int = DEFAULT_QDRANT_PORT,
                  vector_size: int = VECTOR_SIZE,
                  enable_hybrid: bool = True):

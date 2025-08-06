@@ -15,13 +15,13 @@ load_dotenv()
 
 from services.document_processor import DocumentProcessor
 from services.mongo_service import MongoService
-from services.config import MONGODB_URI
+from services.config import MONGODB_URI, QDRANT_HOST
 from datetime import datetime, timezone
 app = FastAPI(title="Document Service API")
 
 mongo_client = MongoClient(MONGODB_URI)
 mongo_service = MongoService(mongo_client)
-qdrant_host = os.getenv("QDRANT_HOST")
+qdrant_host = QDRANT_HOST
 
 embedding_model = AzureOpenAIEmbeddings(
     azure_endpoint=os.getenv("AZURE_OPENAI_EMBEDDING_ENDPOINT"),
@@ -624,7 +624,7 @@ async def query_documents(query: DocumentQuery):
             file_type = hit.payload.get("file_type", "").lower()
 
             # Use page number for PDF and DOC/DOCX files, chunk_id for others
-            if file_type in ['pdf', 'doc', 'docx']:
+            if file_type in ['pdf', 'doc', 'docx', 'pptx','ppt']:
                 citation = f"\\cite{{{document_name}, page {page_number}}}"
                 reference_type = "page"
             else:
@@ -634,7 +634,7 @@ async def query_documents(query: DocumentQuery):
             result_item = {
                 "document_id": hit.payload.get("document_id"),
                 "document_name": document_name,
-                "page_number": page_number if file_type in ['pdf', 'doc', 'docx'] else None,
+                "page_number": page_number if file_type in ['pdf', 'doc', 'docx', 'pptx','ppt'] else None,
                 "chunk_id": chunk_id,
                 "score": hit.score,
                 "citation": citation,

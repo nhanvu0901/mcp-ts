@@ -74,7 +74,7 @@ class FusionService:
         # Fallback identifier: document_id + page_number
         fallback_id = f"{doc_id}_{page_number}"
 
-        unique_id = primary_id if chunk_id else fallback_id
+        unique_id = primary_id if chunk_id is not None else fallback_id
         return hashlib.md5(unique_id.encode()).hexdigest()
 
     def weighted_fusion(self,

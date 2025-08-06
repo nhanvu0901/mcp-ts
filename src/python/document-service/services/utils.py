@@ -22,6 +22,9 @@ from .ocr import (
     assess_output_quality
 )
 
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def clean_document_text(text: str) -> str:
@@ -49,12 +52,12 @@ async def extract_pdf_with_ocr(file_path: str,
                               use_llm: bool = True) -> Tuple[str, List[Dict]]:
     """
     Extract text from PDF using OCR with page tracking information.
-    
+
     Args:
         file_path (str): Path to the PDF file
         suggested_languages (list[str], optional): Languages for OCR (e.g., ['eng', 'vie'])
         use_llm (bool): Whether to use LLM for text correction and formatting
-        
+
     Returns:
         Tuple[str, List[Dict]]: Extracted text and page information
             - str: Full extracted and processed text
@@ -63,17 +66,14 @@ async def extract_pdf_with_ocr(file_path: str,
     """
     try:
         logging.info(f"Starting OCR extraction for: {file_path}")
-        
-        # Convert PDF to images using existing function
+
         list_of_scanned_images = convert_pdf_to_images(file_path, max_pages=0, skip_first_n_pages=0)
-        
+
         logging.info(f"Converted {len(list_of_scanned_images)} pages to images")
         logging.info("Extracting text from converted pages...")
-        
-        # Prepare language code for Tesseract
+
         lang_code = "+".join(suggested_languages) if suggested_languages else None
-        
-        # Extract text from each page individually
+
         with ThreadPoolExecutor() as executor:
             if lang_code:
                 page_texts = list(
@@ -81,29 +81,29 @@ async def extract_pdf_with_ocr(file_path: str,
                 )
             else:
                 page_texts = list(executor.map(ocr_image, list_of_scanned_images))
-        
+
         logging.info("Text extraction from images complete")
-        
+
         # Build page info and concatenate text
         page_info = []
         full_text = ""
-        
+
         for page_num, page_text in enumerate(page_texts):
             # Clean page text
             cleaned_page_text = clean_document_text(page_text) if page_text.strip() else ""
-            
+
             start_pos = len(full_text)
-            
+
             # Add text to full_text (even if empty, to maintain page structure)
             if cleaned_page_text:
                 full_text += cleaned_page_text
-            
+
             # Add page separator between pages (not after last page)
             if page_num < len(page_texts) - 1:
                 full_text += "\n\n"
-            
+
             end_pos = len(full_text)
-            
+
             # Create page info
             page_info_entry = {
                 "page_number": page_num + 1,
@@ -112,34 +112,34 @@ async def extract_pdf_with_ocr(file_path: str,
                 "text_length": len(cleaned_page_text),
                 "ocr_extracted": True
             }
-            
+
             # Add flag for empty pages
             if not cleaned_page_text:
                 page_info_entry["empty_page"] = True
-                
+
             page_info.append(page_info_entry)
-        
+
         # Store original text and page info for quality assessment
         original_full_text = full_text
         original_page_info = page_info.copy()
-        
+
         # If LLM processing is requested, process the text
         if use_llm and full_text.strip():
             logging.info("Processing with LLM for correction and formatting...")
-            
+
             # Use existing LLM processing pipeline
             processed_text = await process_document(
                 page_texts,  # Pass original page texts for better processing
                 reformat_as_markdown=True,
                 suppress_headers_and_page_numbers=True
             )
-            
+
             if processed_text and processed_text.strip():
                 processed_text = remove_corrected_text_header(processed_text)
-                
+
                 # Update page info positions based on processed text
                 page_info = _recalculate_page_positions(processed_text, len(page_texts))
-                
+
                 # Quality assessment
                 try:
                     quality_score, explanation = await assess_output_quality(original_full_text, processed_text)
@@ -148,19 +148,19 @@ async def extract_pdf_with_ocr(file_path: str,
                         logging.info(f"Quality explanation: {explanation}")
                 except Exception as e:
                     logging.warning(f"Quality assessment failed: {e}")
-                
+
                 full_text = processed_text
             else:
                 logging.warning("LLM processing returned empty result, using raw OCR text")
                 page_info = original_page_info  # Restore original page info
-        
+
         # Final cleaning
         full_text = clean_document_text(full_text)
-        
+
         logging.info(f"OCR extraction complete. Total pages: {len(page_info)}, Text length: {len(full_text)}")
-        
+
         return full_text, page_info
-        
+
     except Exception as e:
         logging.error(f"Error in extract_pdf_with_ocr: {e}")
         logging.error(traceback.format_exc())
@@ -174,20 +174,20 @@ def _recalculate_page_positions(processed_text: str, num_pages: int) -> List[Dic
     """
     page_info = []
     text_length = len(processed_text)
-    
+
     if num_pages <= 0:
         return page_info
-        
+
     chars_per_page = text_length // num_pages
-    
+
     for page_num in range(num_pages):
         start_pos = page_num * chars_per_page
         end_pos = min((page_num + 1) * chars_per_page, text_length)
-        
+
         # For the last page, make sure we capture all remaining text
         if page_num == num_pages - 1:
             end_pos = text_length
-        
+
         page_info.append({
             "page_number": page_num + 1,
             "start_position": start_pos,
@@ -196,19 +196,19 @@ def _recalculate_page_positions(processed_text: str, num_pages: int) -> List[Dic
             "ocr_extracted": True,
             "estimated_after_llm": True
         })
-    
+
     return page_info
 
 
-def extract_text_with_ocr(file_path: str, 
+def extract_text_with_ocr(file_path: str,
                           suggested_languages: list[str] = None,
                           use_llm: bool = True) -> Tuple[str, List[Dict]]:
     """
     Extract text with OCR support for PDF files.
     This is a sync wrapper around the async OCR function.
-    
+
     Args:
-        file_path (str): Path to the file  
+        file_path (str): Path to the file
         suggested_languages (list[str], optional): Languages for OCR
         use_llm (bool): Whether to use LLM for text correction (only for OCR)
     """
@@ -226,6 +226,17 @@ def extract_text_with_ocr(file_path: str,
             return asyncio.run(
                 extract_pdf_with_ocr(file_path, suggested_languages, use_llm)
             )
+    elif file_type in ['pptx', 'ppt']:
+        try:
+            if _is_libreoffice_available():
+                return _convert_pptx_to_pdf_and_process(file_path, use_ocr=True,
+                                                        suggested_languages=suggested_languages,
+                                                        use_llm=use_llm)
+            else:
+                raise Exception("LibreOffice not available for PowerPoint OCR")
+        except Exception as e:
+            logger.error(f"PowerPoint OCR processing failed: {e}")
+            raise
     else:
         # For non-PDF files, fall back to regular extraction
         text = extract_text(file_path)
@@ -239,10 +250,71 @@ def extract_text_with_ocr(file_path: str,
         }]
         return text, page_info
 
+
+def extract_pptx_with_pages(file_path: str) -> Tuple[str, List[Dict]]:
+    """Extract text from PowerPoint with slide information."""
+    try:
+        if _is_libreoffice_available():
+            return _convert_pptx_to_pdf_and_process(file_path, use_ocr=False)
+        else:
+            raise Exception("LibreOffice not available for PowerPoint processing")
+    except Exception as e:
+        logger.error(f"PowerPoint extraction failed: {e}")
+        raise
+
+
+def _convert_pptx_to_pdf_and_process(file_path: str, use_ocr: bool = False,
+                                     suggested_languages: list[str] = None,
+                                     use_llm: bool = True) -> Tuple[str, List[Dict]]:
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            conversion_cmd = [
+                'libreoffice', '--headless', '--invisible', '--nodefault',
+                '--nolockcheck', '--nologo', '--norestore',
+                '--convert-to', 'pdf', '--outdir', temp_dir, file_path
+            ]
+
+            result = subprocess.run(conversion_cmd, capture_output=True, text=True, timeout=60)
+
+            if result.returncode != 0:
+                raise Exception(f"LibreOffice PowerPoint conversion failed: {result.stderr}")
+
+            pdf_files = [f for f in os.listdir(temp_dir) if f.endswith('.pdf')]
+            if not pdf_files:
+                raise Exception("PowerPoint to PDF conversion failed - no PDF output")
+
+            pdf_path = os.path.join(temp_dir, pdf_files[0])
+            logger.info(f"PowerPoint converted to PDF: {pdf_files[0]}")
+
+            if use_ocr:
+                try:
+                    loop = asyncio.get_event_loop()
+                    text, page_info = loop.run_until_complete(
+                        extract_pdf_with_ocr(pdf_path, suggested_languages, use_llm)
+                    )
+                except RuntimeError:
+                    text, page_info = asyncio.run(
+                        extract_pdf_with_ocr(pdf_path, suggested_languages, use_llm)
+                    )
+            else:
+                text, page_info = extract_pdf_with_pages(pdf_path)
+
+            # Update page_info to indicate these are slides, not PDF pages
+            for page in page_info:
+                page["page_number"] = page["page_number"]  # Add slide reference
+                page["converted_from_pptx"] = True
+
+            logger.info(f"PowerPoint processing complete: {len(page_info)} slides processed")
+            return text, page_info
+
+    except Exception as e:
+        logger.error(f"LibreOffice conversion failed: {e}")
+        raise
+
+
 def extract_pdf_with_pages(file_path: str) -> Tuple[str, List[Dict]]:
     markdown_text = pymupdf4llm.to_markdown(file_path)
     cleaned_text = clean_document_text(markdown_text)
-
     doc = pymupdf.open(file_path)
     page_info = []
     cumulative_chars = 0
@@ -398,6 +470,8 @@ def extract_text_with_pages(file_path: str) -> Tuple[str, List[Dict]]:
         return extract_pdf_with_pages(file_path)
     elif file_type in ['docx', 'doc']:
         return extract_docx_with_pages(file_path)
+    elif file_type in ['pptx', 'ppt']:  # Add this condition
+        return extract_pptx_with_pages(file_path)
     else:
         text = extract_text(file_path)
         return text, [{
@@ -491,6 +565,8 @@ def extract_text(file_path: str) -> str:
         'py': read_file_content,
         'tex': read_file_content,
         'html': read_file_content,
+        'pptx': extract_text_from_pptx,
+        'ppt': extract_text_from_pptx,
     }
 
     if file_type not in extractors:
@@ -508,6 +584,11 @@ def extract_text_from_pdf(file_path: str, pages: list[int] = None,
 
 def extract_text_from_docx(file_path: str) -> str:
     text, _ = extract_docx_with_pages(file_path)
+    return text
+
+
+def extract_text_from_pptx(file_path: str) -> str:
+    text, _ = extract_pptx_with_pages(file_path)
     return text
 
 

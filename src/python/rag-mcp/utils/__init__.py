@@ -1,8 +1,6 @@
 from .query_expansion import (
     QueryExpansionService,
     ResultDeduplicator,
-    get_expansion_metrics,
-    reset_expansion_metrics,
     ENABLE_QUERY_EXPANSION,
     MAX_QUERY_VARIANTS,
 )
@@ -19,8 +17,6 @@ __all__ = [
     # Query Expansion
     'QueryExpansionService',
     'ResultDeduplicator',
-    'get_expansion_metrics',
-    'reset_expansion_metrics',
     'ENABLE_QUERY_EXPANSION',
     'MAX_QUERY_VARIANTS',
 

@@ -5,8 +5,8 @@ from .qdrant_service import QdrantService
 from .text_splitter import TextSplitter
 from .config import ChunkingMethod, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
 # ADD: Import OCR function
-from .utils import extract_text, extract_text_with_pages, extract_text_with_ocr, clean_document_text
-from .config import DEFAULT_QDRANT_HOST
+from .utils import extract_text_with_pages, extract_text_with_ocr, clean_document_text
+from .config import QDRANT_HOST
 
 
 class DocumentProcessor:
@@ -14,7 +14,7 @@ class DocumentProcessor:
                  collection_name: str,
                  embedding_model: AzureOpenAIEmbeddings,
                  mongo_client: MongoClient = None,
-                 qdrant_host: str = DEFAULT_QDRANT_HOST,
+                 qdrant_host: str = QDRANT_HOST,
                  qdrant_port: int = 6333,
                  vector_size: int = 3072,
                  enable_hybrid: bool = True):
@@ -38,7 +38,7 @@ class DocumentProcessor:
         if not self.mongo_service:
             raise ValueError("MongoDB service not initialized")
 
-        text = extract_text(file_path)
+        text = extract_text_with_pages(file_path)
 
         text = clean_document_text(text)
 
@@ -102,7 +102,7 @@ class DocumentProcessor:
                 "file_type": file_type,
                 "document_id": document_id
             }
-            if file_type in ['pdf', 'doc', 'docx']:
+            if file_type in ['pdf', 'doc', 'docx', 'pptx','ppt']:
                 base_metadata["page_number"] = page_number
             metadata_list.append(base_metadata)
 
@@ -141,8 +141,8 @@ class DocumentProcessor:
                     **kwargs
                 )
             except Exception as e:
-                print(f"Error processing with pages: {e}, falling back to legacy method")
-                text = extract_text(file_path)
+                print(f"Error processing with pages")
+                text = extract_text_with_pages(file_path)
                 return self.process_and_embed(
                     text=text,
                     document_id=document_id,
@@ -156,7 +156,7 @@ class DocumentProcessor:
             if not self.mongo_service:
                 raise ValueError("MongoDB service not initialized")
 
-            text = extract_text(file_path)
+            text = extract_text_with_pages(file_path)
 
             meta = metadata or {}
             meta.update({

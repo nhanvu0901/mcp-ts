@@ -5,11 +5,13 @@ import logging
 from typing import List, Dict, Any, Tuple, Optional
 from collections import defaultdict
 from langchain_openai import AzureChatOpenAI
-
+from .hybrid_search import HybridSearchService
+from .fusion_score import FusionService
+from config import config
 logger = logging.getLogger(__name__)
 
-ENABLE_QUERY_EXPANSION = os.getenv("ENABLE_QUERY_EXPANSION", "false").lower() == "true"
-MAX_QUERY_VARIANTS = int(os.getenv("MAX_QUERY_VARIANTS", "3"))
+
+MAX_QUERY_VARIANTS = config.MAX_QUERY_VARIANTS
 
 expansion_metrics = {
     "queries_expanded": 0,
@@ -21,7 +23,7 @@ expansion_metrics = {
     "successful_expansions": 0,
     "failed_expansions": 0
 }
-
+EXPANSION_FUSION_METHOD = config.EXPANSION_FUSION_METHOD
 
 class QueryExpansionService:
     """
@@ -32,8 +34,58 @@ class QueryExpansionService:
     document terminology.
     """
 
-    def __init__(self, llm_client: AzureChatOpenAI):
+    def __init__(self, llm_client: AzureChatOpenAI,hybrid_search_service: HybridSearchService,fusion_service: FusionService):
         self.llm_client = llm_client
+        self.hybrid_search_service = hybrid_search_service
+        self.fusion_service = fusion_service
+
+    async def perform_query_expansion_retrieval(self, query: str,
+                                                user_id: str,
+                                                collection_ids: List[str],
+                                                limit: int,
+                                                dense_weight: float,
+                                                normalization: str) -> str:
+        """
+        Perform retrieval with query expansion.
+
+        Args:
+            query: Original user query
+            user_id: User ID for filtering
+            collection_ids: Collections to search
+            limit: Maximum results
+            dense_weight: Weight for dense scores
+            normalization: Score normalization method
+
+        Returns:
+            Formatted results string
+        """
+        logger.info(f"Starting query expansion retrieval for: '{query}'")
+
+        # Generate query variants
+        query_variants = await self.generate_query_variants(query)
+        all_queries = [query] + query_variants
+
+        # Perform retrieval for each query variant
+        results_by_query = []
+
+        for query_text in all_queries:
+            query_results = await self.hybrid_search_service.perform_hybrid_search(
+                query=query_text,
+                collection_ids=collection_ids,
+                user_id=user_id,
+                limit=limit,
+                dense_weight=dense_weight,
+                normalization=normalization
+            )
+            results_by_query.append(query_results)
+
+        fused_results = self.fusion_service.fuse_query_variants(results_by_query, method=EXPANSION_FUSION_METHOD)
+
+        # Take top results and convert back to expected format
+        top_results = [result for result, score in fused_results[:limit]]
+
+        logger.info(f"Query expansion completed: {len(top_results)} final results")
+        return self.format_results_response(top_results)
 
     async def generate_query_variants(self, original_query: str, max_variants: int = None) -> List[str]:
         """
@@ -127,6 +179,40 @@ class QueryExpansionService:
             expansion_metrics["average_expansion_time"] = (
                     expansion_metrics["total_expansion_time"] / expansion_metrics["successful_expansions"]
             )
+    def format_results_response(results: List[Any]) -> str:
+        """
+        Format search results with inline citations.
+
+        Args:
+            results: List of search results from Qdrant
+
+        Returns:
+            Formatted text with SOURCE_CITATION markers
+        """
+        if not results:
+            return "No relevant documents found."
+
+        formatted_results = []
+        for i, result in enumerate(results):
+            text = result.payload.get('text', str(result.payload))
+            document_name = result.payload.get('document_name', 'Unknown Document')
+            page_number = result.payload.get('page_number', 1)
+            chunk_id = result.payload.get('chunk_id', i)
+            file_type = result.payload.get('file_type', '').lower()
+            score = getattr(result, 'score', 0.0)
+
+            # Generate appropriate citation format
+            if file_type in ['pdf', 'doc', 'docx', 'pptx', 'ppt']:
+                citation = f"SOURCE_CITATION: \\cite{{{document_name}, page {page_number}}}"
+            else:
+                citation = f"SOURCE_CITATION: \\cite{{{document_name}, chunk {chunk_id}}}"
+
+            formatted_chunk = f"{text} {citation}"
+            formatted_results.append(formatted_chunk)
+
+            logger.debug(f"Result {i + 1}: {document_name}, Score: {score:.3f}")
+
+        return "\n\n".join(formatted_results)
 
 
 class ResultDeduplicator:
@@ -204,7 +290,6 @@ class ResultDeduplicator:
 
 
 def get_expansion_metrics() -> Dict[str, Any]:
-
     # Calculate derived metrics
     total_queries = expansion_metrics["queries_expanded"]
     success_rate = (expansion_metrics["successful_expansions"] / total_queries * 100) if total_queries > 0 else 0
