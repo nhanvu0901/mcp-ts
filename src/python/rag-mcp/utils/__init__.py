@@ -1,7 +1,6 @@
 from .query_expansion import (
     QueryExpansionService,
     ResultDeduplicator,
-    ENABLE_QUERY_EXPANSION,
     MAX_QUERY_VARIANTS,
 )
 
@@ -13,11 +12,15 @@ from .fusion_score import (
     FusionMethod,
 )
 
+from .llm_reranker import (
+    LLMRerankerService,
+    create_reranking_metadata,
+)
+
 __all__ = [
     # Query Expansion
     'QueryExpansionService',
     'ResultDeduplicator',
-    'ENABLE_QUERY_EXPANSION',
     'MAX_QUERY_VARIANTS',
 
     # Search Services
@@ -28,4 +31,8 @@ __all__ = [
     'FusionService',
     'NormalizationMethod',
     'FusionMethod',
+
+    # LLM Reranker
+    'LLMRerankerService',
+    'create_reranking_metadata',
 ]

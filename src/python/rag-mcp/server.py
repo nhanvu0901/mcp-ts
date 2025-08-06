@@ -7,12 +7,14 @@ import logging
 import asyncio
 from typing import List, Any
 from utils.config import config
+import time
 # Import new utility services
 from utils.tfidf_search import TfidfService
 from utils.dense_search import DenseSearchService
 from utils.fusion_score import FusionService
 from utils.query_expansion import QueryExpansionService
 from utils.hybrid_search import HybridSearchService
+from utils.llm_reranker import LLMRerankerService, create_reranking_metadata
 load_dotenv()
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -29,6 +31,7 @@ DEFAULT_FUSION_METHOD = config.DEFAULT_FUSION_METHOD
 # TF-IDF Configuration
 TFIDF_MODELS_DIR = config.TFIDF_MODELS_DIR
 
+ENABLE_LLM_RERANKING = config.ENABLE_LLM_RERANKING
 # Initialize MCP Server
 mcp = FastMCP(
     config.SERVICE_NAME,
@@ -57,15 +60,18 @@ hybrid_search_service = HybridSearchService(
     tfidf_service,
     fusion_service
 )
-query_expansion_service = QueryExpansionService(llm_client,hybrid_search_service,fusion_service)
+
+query_expansion_service = QueryExpansionService(llm_client,hybrid_search_service,fusion_service) if ENABLE_QUERY_EXPANSION else None
+reranker_service = LLMRerankerService(llm_client) if ENABLE_LLM_RERANKING else None
 
 
-def format_results_response(results: List[Any]) -> str:
+def format_results_response(results: List[Any], reranking_metadata: dict = None) -> str:
     """
-    Format search results with inline citations.
+    Format search results with inline citations and optional reranking metadata.
 
     Args:
         results: List of search results from Qdrant
+        reranking_metadata: Optional metadata about reranking process
 
     Returns:
         Formatted text with SOURCE_CITATION markers
@@ -91,9 +97,23 @@ def format_results_response(results: List[Any]) -> str:
         formatted_chunk = f"{text} {citation}"
         formatted_results.append(formatted_chunk)
 
-        logger.debug(f"Result {i + 1}: {document_name}, Score: {score:.3f}")
+        # Log with reranking info if available
+        if hasattr(result, 'reranker_score'):
+            logger.debug(f"Result {i + 1}: {document_name}, Hybrid: {score:.3f}, "
+                         f"Reranker: {result.reranker_score}, Final Rank: {result.final_rank}")
+        else:
+            logger.debug(f"Result {i + 1}: {document_name}, Score: {score:.3f}")
 
-    return "\n\n".join(formatted_results)
+    response_text = "\n\n".join(formatted_results)
+
+    # Append reranking metadata if available (for debugging/transparency)
+    if reranking_metadata and reranking_metadata.get('enabled'):
+        metadata_note = (f"\n\n[Reranking: {reranking_metadata['candidates_processed']} → "
+                         f"{reranking_metadata['final_results']} results, "
+                         f"{reranking_metadata['processing_time_ms']:.0f}ms]")
+        response_text += metadata_note
+
+    return response_text
 
 
 async def perform_dense_only_search(query: str,
@@ -122,9 +142,6 @@ async def perform_dense_only_search(query: str,
     )
 
     return results
-
-
-
 
 
 @mcp.tool()
@@ -158,36 +175,82 @@ async def retrieve(query: str,
             return f"Invalid collection_id type: expected list of strings, got {type(collection_id)}: {collection_id!r}"
         logger.info(f"Starting {search_type} search for query: '{query}' in {len(collection_id)} collections")
 
+        # Adjust search limit for reranking (get more candidates for reranking)
+        search_limit = config.RERANKER_TOP_K if ENABLE_LLM_RERANKING else limit
+        final_limit = min(config.RERANKER_TOP_N, limit) if ENABLE_LLM_RERANKING else limit
+
+        # Perform initial search with query expansion if enabled
         if ENABLE_QUERY_EXPANSION:
             logger.info("Query expansion enabled - using expanded retrieval")
-            return await query_expansion_service.perform_query_expansion_retrieval(
-                query, user_id, collection_id, limit, dense_weight, normalization
-            )
-
-        if search_type == "hybrid":
-            results = await hybrid_search_service.perform_hybrid_search(
-                query=query,
-                collection_ids=collection_id,
-                user_id=user_id,
-                limit=limit,
-                dense_weight=dense_weight,
-                normalization=normalization,
-                fusion_method=fusion_method
+            initial_results = await query_expansion_service.perform_query_expansion_retrieval(
+                query, user_id, collection_id, search_limit, dense_weight, normalization
             )
         else:
-            results = await perform_dense_only_search(
-                query=query,
-                collection_ids=collection_id,
-                user_id=user_id,
-                limit=limit
-            )
+            # Standard search without query expansion
+            if search_type == "hybrid":
+                initial_results = await hybrid_search_service.perform_hybrid_search(
+                    query=query,
+                    collection_ids=collection_id,
+                    user_id=user_id,
+                    limit=search_limit,
+                    dense_weight=dense_weight,
+                    normalization=normalization,
+                    fusion_method=fusion_method
+                )
+            else:
+                initial_results = await perform_dense_only_search(
+                    query=query,
+                    collection_ids=collection_id,
+                    user_id=user_id,
+                    limit=search_limit
+                )
 
-        # Apply similarity threshold if configured
+
         if SIMILARITY_THRESHOLD > 0.0:
-            results = [r for r in results if getattr(r, 'score', 0) >= SIMILARITY_THRESHOLD]
-            logger.info(f"Applied similarity threshold {SIMILARITY_THRESHOLD}: {len(results)} results remain")
+            initial_results = [r for r in initial_results if getattr(r, 'score', 0) >= SIMILARITY_THRESHOLD]
+            logger.info(f"Applied similarity threshold {SIMILARITY_THRESHOLD}: {len(initial_results)} results remain")
 
-        return format_results_response(results)
+        # Initialize reranking metadata
+        reranking_metadata = create_reranking_metadata(
+            enabled=False,
+            candidates_processed=len(initial_results),
+            final_results=len(initial_results),
+            processing_time_ms=0
+        )
+
+        # Apply LLM reranking if enabled and results available
+        if ENABLE_LLM_RERANKING and initial_results:
+            try:
+                start_time = time.time()
+                logger.info(f"Starting LLM reranking on {len(initial_results)} candidates")
+
+                reranked_results = await reranker_service.rerank_results(
+                    query=query,
+                    candidates=initial_results,
+                    limit=final_limit
+                )
+
+                processing_time = (time.time() - start_time) * 1000
+                final_results = reranked_results
+
+                # Update reranking metadata
+                reranking_metadata = create_reranking_metadata(
+                    enabled=True,
+                    candidates_processed=len(initial_results),
+                    final_results=len(final_results),
+                    processing_time_ms=processing_time
+                )
+
+                logger.info(f"LLM reranking completed: {len(initial_results)} → {len(final_results)} results")
+
+            except Exception as e:
+                logger.error(f"LLM reranking failed, using original results: {e}")
+                final_results = initial_results[:final_limit]
+        else:
+            # No reranking - just take top N from initial results
+            final_results = initial_results[:limit]
+
+        return format_results_response(final_results, reranking_metadata)
 
     except Exception as e:
         logger.error(f"Error during retrieval for query '{query}': {e}", exc_info=True)
@@ -235,5 +298,16 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
 
 if __name__ == "__main__":
     logger.info("RAG Service MCP server starting up...")
+
+    asyncio.run(retrieve(
+            query="What is ai agent",
+            collection_id=['0000984f-9213-4841-b636-8e794efdc376','23c9f692-9481-45e9-93a8-4b1997c34baa','d176449b-8df5-40cb-b110-c2335b2a218a'],
+            user_id='nhan',
+            limit=10,
+            dense_weight=0.6,
+            normalization='min_max',
+            fusion_method='weighted'
+        ))
+
     mcp.run(transport="sse")
     logger.info("RAG Service MCP server shut down.")

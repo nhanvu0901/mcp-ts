@@ -7,7 +7,7 @@ from collections import defaultdict
 from langchain_openai import AzureChatOpenAI
 from .hybrid_search import HybridSearchService
 from .fusion_score import FusionService
-from config import config
+from .config import config
 logger = logging.getLogger(__name__)
 
 

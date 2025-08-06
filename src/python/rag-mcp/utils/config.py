@@ -30,6 +30,7 @@ class RAGConfig:
     AZURE_OPENAI_EMBEDDING_API_KEY: str = os.getenv("AZURE_OPENAI_EMBEDDING_API_KEY", "")
     AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION: str = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION", "")
     AZURE_OPENAI_TEMPERATURE: str = 0.3
+
     # Search Configuration
     DEFAULT_DENSE_WEIGHT: float = float(os.getenv("DENSE_WEIGHT", "0.6"))
     DEFAULT_SEARCH_TYPE: str = "hybrid"
@@ -44,6 +45,16 @@ class RAGConfig:
     ENABLE_QUERY_EXPANSION: bool = os.getenv("ENABLE_QUERY_EXPANSION", "false").lower() == "true"
     MAX_QUERY_VARIANTS: int = int(os.getenv("MAX_QUERY_VARIANTS", "3"))
     EXPANSION_FUSION_METHOD: str = os.getenv("EXPANSION_FUSION_METHOD", "rrf")
+
+    # LLM Reranker Configuration
+    ENABLE_LLM_RERANKING: bool = os.getenv("ENABLE_LLM_RERANKING", "false").lower() == "true"
+    RERANKER_MODEL_NAME: str = os.getenv("RERANKER_MODEL_NAME", "gpt-4o-mini")
+    RERANKER_TOP_K: int = int(os.getenv("RERANKER_TOP_K", "20"))
+    RERANKER_TOP_N: int = int(os.getenv("RERANKER_TOP_N", "10"))
+    RERANKER_BATCH_SIZE: int = int(os.getenv("RERANKER_BATCH_SIZE", "5"))
+    RERANKER_TEMPERATURE: float = float(os.getenv("RERANKER_TEMPERATURE", "0.1"))
+    RERANKER_MAX_TOKENS: int = int(os.getenv("RERANKER_MAX_TOKENS", "10"))
+    RERANKER_TIMEOUT: int = int(os.getenv("RERANKER_TIMEOUT", "30"))
 
     # Performance Configuration
     MAX_CONCURRENT_SEARCHES: int = 5
@@ -70,6 +81,7 @@ class RAGConfig:
 
         return missing_vars
 
+
     @classmethod
     def get_embedding_config(cls) -> dict:
         """Get embedding model configuration"""
@@ -92,10 +104,22 @@ class RAGConfig:
         }
 
     @classmethod
+    def get_reranker_config(cls) -> dict:
+        """Get reranker-specific LLM configuration"""
+        return {
+            "azure_endpoint": cls.AZURE_OPENAI_ENDPOINT,
+            "api_key": cls.AZURE_OPENAI_API_KEY,
+            "azure_deployment": cls.RERANKER_MODEL_NAME,
+            "api_version": cls.AZURE_OPENAI_MODEL_API_VERSION,
+            "temperature": cls.RERANKER_TEMPERATURE
+        }
+
+    @classmethod
     def get_qdrant_config(cls) -> dict:
         return {
             "host": cls.QDRANT_HOST,
             "port": cls.QDRANT_PORT
         }
+
 
 config = RAGConfig()
