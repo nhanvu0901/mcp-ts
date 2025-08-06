@@ -49,13 +49,9 @@ class LLMRerankerService:
 
             enhanced_results = []
             for rank, (result, reranker_score) in enumerate(reranked_results, 1):
-                enhanced_result = result
-
-                # Add reranker attributes
-                enhanced_result.reranker_score = reranker_score
-                enhanced_result.final_rank = rank
-
-                enhanced_results.append(enhanced_result)
+                result.payload['reranker_score'] = reranker_score
+                result.payload['final_rank'] = rank
+                enhanced_results.append(result)
 
             processing_time = (time.time() - start_time) * 1000
             logger.info(f"Reranking completed in {processing_time:.2f}ms, returned {len(enhanced_results)} results")
@@ -74,6 +70,7 @@ class LLMRerankerService:
             query: User search query
             candidates: List of search result candidates
 
+        Returns:
         Returns:
             List of (result, score) tuples
         """
