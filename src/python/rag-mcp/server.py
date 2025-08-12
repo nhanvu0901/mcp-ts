@@ -298,16 +298,5 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
 
 if __name__ == "__main__":
     logger.info("RAG Service MCP server starting up...")
-
-    asyncio.run(retrieve(
-            query="What is ai agent",
-            collection_id=['0000984f-9213-4841-b636-8e794efdc376','23c9f692-9481-45e9-93a8-4b1997c34baa','d176449b-8df5-40cb-b110-c2335b2a218a'],
-            user_id='nhan',
-            limit=10,
-            dense_weight=0.6,
-            normalization='min_max',
-            fusion_method='weighted'
-        ))
-
     mcp.run(transport="sse")
     logger.info("RAG Service MCP server shut down.")

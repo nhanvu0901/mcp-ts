@@ -7,7 +7,7 @@ from scipy.sparse import csr_matrix
 from qdrant_client.models import SparseVector
 
 logger = logging.getLogger(__name__)
-script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class TfidfService:
     """
@@ -24,7 +24,8 @@ class TfidfService:
 
     def get_vectorizer_path(self, collection_id: str) -> str:
         """Get file path for TF-IDF vectorizer"""
-        return os.path.join(script_dir,'data','tfidf_models',   f"{collection_id}_tfidf.pkl")
+        # return os.path.join(script_dir,'data','tfidf_models',   f"{collection_id}_tfidf.pkl")
+        return os.path.join(self.models_dir, f"{collection_id}_tfidf.pkl")
 
     def load_vectorizer(self, collection_id: str) -> Optional[TfidfVectorizer]:
         """

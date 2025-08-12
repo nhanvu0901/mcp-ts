@@ -49,13 +49,9 @@ class LLMRerankerService:
 
             enhanced_results = []
             for rank, (result, reranker_score) in enumerate(reranked_results, 1):
-                enhanced_result = result
-
-                # Add reranker attributes
-                enhanced_result.reranker_score = reranker_score
-                enhanced_result.final_rank = rank
-
-                enhanced_results.append(enhanced_result)
+                result.payload['reranker_score'] = reranker_score
+                result.payload['final_rank'] = rank
+                enhanced_results.append(result)
 
             processing_time = (time.time() - start_time) * 1000
             logger.info(f"Reranking completed in {processing_time:.2f}ms, returned {len(enhanced_results)} results")
@@ -74,6 +70,7 @@ class LLMRerankerService:
             query: User search query
             candidates: List of search result candidates
 
+        Returns:
         Returns:
             List of (result, score) tuples
         """
@@ -117,7 +114,6 @@ class LLMRerankerService:
             Relevance score (0-100)
         """
         try:
-            # Extract text and metadata from candidate
             text = candidate.payload.get('text', '')
             metadata = {
                 'document_name': candidate.payload.get('document_name', 'Unknown'),
@@ -126,17 +122,14 @@ class LLMRerankerService:
                 'original_score': getattr(candidate, 'score', 0)
             }
 
-            # Construct relevance evaluation prompt
             prompt = self._construct_relevance_prompt(query, text, metadata)
 
-            # Get LLM evaluation
             response = await self.llm_client.ainvoke(
                 [{"role": "user", "content": prompt}],
                 temperature=self.temperature,
                 max_tokens=self.max_tokens
             )
 
-            # Parse response
             score = self._parse_llm_response(response.content)
             return score
 

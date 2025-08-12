@@ -39,12 +39,47 @@ class QueryExpansionService:
         self.hybrid_search_service = hybrid_search_service
         self.fusion_service = fusion_service
 
+    def format_results_response(self,results: List[Any]) -> str:
+        """
+        Format search results with inline citations.
+
+        Args:
+            results: List of search results from Qdrant
+
+        Returns:
+            Formatted text with SOURCE_CITATION markers
+        """
+        if not results:
+            return "No relevant documents found."
+
+        formatted_results = []
+        for i, result in enumerate(results):
+            text = result.payload.get('text', str(result.payload))
+            document_name = result.payload.get('document_name', 'Unknown Document')
+            page_number = result.payload.get('page_number', 1)
+            chunk_id = result.payload.get('chunk_id', i)
+            file_type = result.payload.get('file_type', '').lower()
+            score = getattr(result, 'score', 0.0)
+
+            # Generate appropriate citation format
+            if file_type in ['pdf', 'doc', 'docx', 'pptx', 'ppt']:
+                citation = f"SOURCE_CITATION: \\cite{{{document_name}, page {page_number}}}"
+            else:
+                citation = f"SOURCE_CITATION: \\cite{{{document_name}, chunk {chunk_id}}}"
+
+            formatted_chunk = f"{text} {citation}"
+            formatted_results.append(formatted_chunk)
+
+            logger.debug(f"Result {i + 1}: {document_name}, Score: {score:.3f}")
+
+        return "\n\n".join(formatted_results)
+
     async def perform_query_expansion_retrieval(self, query: str,
                                                 user_id: str,
                                                 collection_ids: List[str],
                                                 limit: int,
                                                 dense_weight: float,
-                                                normalization: str) -> str:
+                                                normalization: str) -> List[Any]:
         """
         Perform retrieval with query expansion.
 
@@ -85,7 +120,7 @@ class QueryExpansionService:
         top_results = [result for result, score in fused_results[:limit]]
 
         logger.info(f"Query expansion completed: {len(top_results)} final results")
-        return self.format_results_response(top_results)
+        return top_results
 
     async def generate_query_variants(self, original_query: str, max_variants: int = None) -> List[str]:
         """
@@ -179,40 +214,6 @@ class QueryExpansionService:
             expansion_metrics["average_expansion_time"] = (
                     expansion_metrics["total_expansion_time"] / expansion_metrics["successful_expansions"]
             )
-    def format_results_response(results: List[Any]) -> str:
-        """
-        Format search results with inline citations.
-
-        Args:
-            results: List of search results from Qdrant
-
-        Returns:
-            Formatted text with SOURCE_CITATION markers
-        """
-        if not results:
-            return "No relevant documents found."
-
-        formatted_results = []
-        for i, result in enumerate(results):
-            text = result.payload.get('text', str(result.payload))
-            document_name = result.payload.get('document_name', 'Unknown Document')
-            page_number = result.payload.get('page_number', 1)
-            chunk_id = result.payload.get('chunk_id', i)
-            file_type = result.payload.get('file_type', '').lower()
-            score = getattr(result, 'score', 0.0)
-
-            # Generate appropriate citation format
-            if file_type in ['pdf', 'doc', 'docx', 'pptx', 'ppt']:
-                citation = f"SOURCE_CITATION: \\cite{{{document_name}, page {page_number}}}"
-            else:
-                citation = f"SOURCE_CITATION: \\cite{{{document_name}, chunk {chunk_id}}}"
-
-            formatted_chunk = f"{text} {citation}"
-            formatted_results.append(formatted_chunk)
-
-            logger.debug(f"Result {i + 1}: {document_name}, Score: {score:.3f}")
-
-        return "\n\n".join(formatted_results)
 
 
 class ResultDeduplicator:
