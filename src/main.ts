@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 import fastify, {type FastifyInstance} from 'fastify';
-import multipart from '@fastify/multipart';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import swagger from '@fastify/swagger';
@@ -85,7 +84,6 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
             body: request.body,
             bodySize: request.body ? `${Buffer.byteLength(JSON.stringify(request.body))} bytes` : '0 bytes',
             contentType: request.headers['content-type'],
-            isMultipart: request.isMultipart(),
         }, 'REQUEST BODY DATA');
     });
 
@@ -275,13 +273,6 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
                     connectSrc: [`'self'`]
                 }
             }
-        });
-
-        await server.register(multipart, {
-            limits: {
-                fileSize: config.MAX_FILE_SIZE,
-                files: 1,
-            },
         });
 
         if (config.NODE_ENV !== 'production') {

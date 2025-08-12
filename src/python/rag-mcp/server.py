@@ -299,4 +299,14 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
 if __name__ == "__main__":
     logger.info("RAG Service MCP server starting up...")
     mcp.run(transport="sse")
+
+    # results = self.qdrant_client.query_points(
+    #     collection_name=collection_id,
+    #     query_vector=("text_dense", query_embedding),
+    #     query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
+    #     limit=limit
+    # )
+
+    logger.debug(f"Dense search found {len(results)} results in {collection_id}")
+
     logger.info("RAG Service MCP server shut down.")

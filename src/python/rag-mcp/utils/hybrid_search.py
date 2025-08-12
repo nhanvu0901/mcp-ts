@@ -128,7 +128,7 @@ class HybridSearchService:
 
         if sparse_vector and sparse_vector.indices:
             try:
-                sparse_results = self.qdrant_client.search(
+                sparse_results = self.qdrant_client.query_points(
                     collection_name=collection_id,
                     query_vector=NamedSparseVector(name="text_sparse", vector=sparse_vector),
                     query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
