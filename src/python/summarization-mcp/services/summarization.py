@@ -8,7 +8,7 @@ import semchunk
 import tiktoken
 from lingua import Language, LanguageDetectorBuilder
 from motor.motor_asyncio import AsyncIOMotorClient
-
+from langchain_core.messages import HumanMessage, SystemMessage
 from .utils import get_llm_client
 
 detector = LanguageDetectorBuilder.from_all_languages().with_preloaded_language_models().build()
@@ -132,8 +132,15 @@ class DocumentSummarizer:
         })
 
     async def _llm_complete(self, messages, **kwargs):
-        response = await self.llm_client.acomplete(messages, **kwargs)
-        return json.loads(response.choices[0].message.content)
+        langchain_messages = []
+        for msg in messages:
+            if msg["role"] == "system":
+                langchain_messages.append(SystemMessage(content=msg["content"]))
+            elif msg["role"] == "user":
+                langchain_messages.append(HumanMessage(content=msg["content"]))
+
+        response = await self.llm_client.ainvoke(langchain_messages)
+        return json.loads(response.content)
 
     async def _summarize_chunk(self, chunk: str, bullet_num: int, lang: Optional[SupportedLanguage]) -> Tuple[str, list]:
         system_prompt = CHUNK_SYS_PROMPT
