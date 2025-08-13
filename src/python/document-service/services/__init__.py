@@ -1,2 +1,2 @@
-from services.document_processor import DocumentProcessor
+from .document_processor import DocumentProcessor
 

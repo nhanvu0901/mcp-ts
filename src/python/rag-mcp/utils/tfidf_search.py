@@ -1,7 +1,7 @@
 import os
 import pickle
 import logging
-from typing import Optional, List
+from typing import Optional
 from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse import csr_matrix
 from qdrant_client.models import SparseVector

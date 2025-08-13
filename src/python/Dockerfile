@@ -10,19 +10,13 @@ RUN apt-get update && \
     gosu \
     supervisor \
     libreoffice \
+    poppler-utils \
     libmagic1 \
-    catdoc \
     tesseract-ocr \
     tesseract-ocr-eng \
     tesseract-ocr-slk \
     tesseract-ocr-ces \
-    poppler-utils \
-    # OpenCV/OpenGL support
-    libgl1-mesa-glx \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
     libgomp1 && \
     apt-get autoremove -y && \
     apt-get clean && \

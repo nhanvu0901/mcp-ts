@@ -1,5 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 import tempfile
@@ -8,8 +7,14 @@ import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from qdrant_client import QdrantClient
-from qdrant_client.models import VectorParams, Distance
+from qdrant_client.models import (
+    VectorParams, Distance,
+    SparseVectorParams, SparseIndexParams,
+    BinaryQuantization, BinaryQuantizationConfig,
+    OptimizersConfigDiff
+)
 from langchain_openai import AzureOpenAIEmbeddings
+import uvicorn
 
 load_dotenv()
 
@@ -17,6 +22,7 @@ from services.document_processor import DocumentProcessor
 from services.mongo_service import MongoService
 from services.config import MONGODB_URI, QDRANT_HOST
 from datetime import datetime, timezone
+
 app = FastAPI(title="Document Service API")
 
 mongo_client = MongoClient(MONGODB_URI)
@@ -56,6 +62,7 @@ class DocumentQuery(BaseModel):
     include_metadata: Optional[bool] = True
     include_text: Optional[bool] = True
     min_score: Optional[float] = 0.0  # Minimum similarity score threshold
+
 
 class DocumentOCRUpload(BaseModel):
     suggested_languages: Optional[List[str]] = ["eng"]
@@ -110,6 +117,7 @@ async def get_document_references(user_id: str):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/collections")
 async def create_collection(collection: CollectionCreate):
     collection_id = str(uuid.uuid4())
@@ -119,13 +127,7 @@ async def create_collection(collection: CollectionCreate):
         print(f"Generated collection_id: {collection_id}")
 
         try:
-            from qdrant_client.models import (
-                VectorParams, Distance, 
-                SparseVectorParams, SparseIndexParams,
-                BinaryQuantization, BinaryQuantizationConfig,
-                OptimizersConfigDiff
-            )
-            
+
             qdrant_client = QdrantClient(host=qdrant_host, port=6333)
 
             if not qdrant_client.collection_exists(collection_id):
@@ -357,6 +359,7 @@ async def upload_document(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/documents/ocr")
 async def upload_document_ocr(
         file: UploadFile = File(...),
@@ -420,7 +423,7 @@ async def upload_document_ocr(
         # ADD: Check if file type supports OCR
         if file_extension not in ['pdf']:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"OCR is currently only supported for PDF files. File type: {file_extension}"
             )
 
@@ -490,6 +493,7 @@ async def upload_document_ocr(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
+
 
 @app.get("/documents/{document_id}")
 async def get_document_info(document_id: str):
@@ -624,7 +628,7 @@ async def query_documents(query: DocumentQuery):
             file_type = hit.payload.get("file_type", "").lower()
 
             # Use page number for PDF and DOC/DOCX files, chunk_id for others
-            if file_type in ['pdf', 'doc', 'docx', 'pptx','ppt']:
+            if file_type in ['pdf', 'doc', 'docx', 'pptx', 'ppt']:
                 citation = f"\\cite{{{document_name}, page {page_number}}}"
                 reference_type = "page"
             else:
@@ -634,7 +638,7 @@ async def query_documents(query: DocumentQuery):
             result_item = {
                 "document_id": hit.payload.get("document_id"),
                 "document_name": document_name,
-                "page_number": page_number if file_type in ['pdf', 'doc', 'docx', 'pptx','ppt'] else None,
+                "page_number": page_number if file_type in ['pdf', 'doc', 'docx', 'pptx', 'ppt'] else None,
                 "chunk_id": chunk_id,
                 "score": hit.score,
                 "citation": citation,
@@ -647,8 +651,8 @@ async def query_documents(query: DocumentQuery):
 
             # Include metadata if requested
             if query.include_metadata:
-                metadata = {k: v for k, v in hit.payload.items() 
-                           if k not in ["text", "document_id", "document_name", "page_number", "chunk_id", "user_id"]}
+                metadata = {k: v for k, v in hit.payload.items()
+                            if k not in ["text", "document_id", "document_name", "page_number", "chunk_id", "user_id"]}
                 result_item["metadata"] = metadata
 
             # Apply additional filters if provided
@@ -664,7 +668,7 @@ async def query_documents(query: DocumentQuery):
                             if hit.payload[filter_key] != filter_value:
                                 should_include = False
                                 break
-                
+
                 if should_include:
                     results.append(result_item)
             else:
@@ -837,6 +841,7 @@ async def get_document_status(document_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/health")
 async def health_check():
     try:
@@ -844,14 +849,14 @@ async def health_check():
         mongo_status = "connected"
     except Exception as e:
         mongo_status = f"error: {str(e)}"
-    
+
     try:
         qdrant_client = QdrantClient(host=qdrant_host, port=6333)
         qdrant_client.get_collections()
         qdrant_status = "connected"
     except Exception as e:
         qdrant_status = f"error: {str(e)}"
-    
+
     return {
         "status": "healthy",
         "mongodb": mongo_status,
@@ -859,6 +864,6 @@ async def health_check():
         "qdrant": qdrant_status
     }
 
+
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List, Any, Optional
+from typing import List, Any
 from langchain_openai import AzureOpenAIEmbeddings
 from qdrant_client import QdrantClient
 

@@ -3,7 +3,6 @@ import pymupdf
 from docx import Document
 import pandas as pd
 import os
-from typing import Tuple, List, Dict
 import re
 import subprocess
 import tempfile

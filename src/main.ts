@@ -1,9 +1,10 @@
 import 'reflect-metadata';
-import fastify, {type FastifyInstance} from 'fastify';
+import fastify, {type FastifyInstance, type FastifyRequest, type FastifyReply} from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import compress from '@fastify/compress';
 import {createReactAgent} from '@langchain/langgraph/prebuilt';
 import {MultiServerMCPClient} from '@langchain/mcp-adapters';
 import {MongoClient} from 'mongodb';
@@ -70,13 +71,13 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
 
     if (!debugEnabled) return;
 
-    server.addHook('onRequest', async (request, reply) => {
+    server.addHook('onRequest', async (request: FastifyRequest) => {
         (request as any).debugInfo = {
             startTime: process.hrtime.bigint()
         };
     });
 
-    server.addHook('preHandler', async (request, reply) => {
+    server.addHook('preHandler', async (request: FastifyRequest) => {
         request.log.debug({
             requestId: request.id,
             method: request.method,
@@ -87,7 +88,7 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
         }, 'REQUEST BODY DATA');
     });
 
-    server.addHook('onSend', async (request, reply, payload) => {
+    server.addHook('onSend', async (request: FastifyRequest, reply: FastifyReply, payload: unknown) => {
         let responseBody: any = payload;
         let responseSize = 0;
         try {
@@ -124,12 +125,12 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
         } catch (error) {
             request.log.warn({
                 requestId: request.id,
-            }, 'Failed to log response body '+error);
+            }, 'Failed to log response body ' + error);
         }
         return payload;
     });
 
-    server.addHook('onError', async (request, reply, error) => {
+    server.addHook('onError', async (request: FastifyRequest, reply: FastifyReply, error: Error) => {
         const debugInfo = (request as any).debugInfo;
         const errorTime = debugInfo ? process.hrtime.bigint() : process.hrtime.bigint();
         const duration = debugInfo ? Number(errorTime - debugInfo.startTime) / 1000000 : 0;
@@ -158,17 +159,17 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
                 function: error.stack?.split('\n')[1]?.trim(),
                 file: error.stack?.split('\n')[1]?.match(/\((.+):\d+:\d+\)/)?.[1]
             }
-        },'ERROR DATA');
+        }, 'ERROR DATA');
     });
 
-    server.addHook('onTimeout', async (request, reply) => {
+    server.addHook('onTimeout', async (request: FastifyRequest, reply: FastifyReply) => {
         request.log.warn({
             requestId: request.id,
             method: request.method,
             url: request.url,
             timeout: server.server.timeout,
             timestamp: new Date().toISOString()
-        },'TIMEOUT');
+        }, 'TIMEOUT');
     });
 }
 

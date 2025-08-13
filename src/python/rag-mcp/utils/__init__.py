@@ -16,22 +16,17 @@ from .llm_reranker import (
     LLMRerankerService,
     create_reranking_metadata,
 )
-
+from .hybrid_search import HybridSearchService
 __all__ = [
     # Query Expansion
+    'HybridSearchService',
     'QueryExpansionService',
     'ResultDeduplicator',
-    'MAX_QUERY_VARIANTS',
-
     # Search Services
     'TfidfService',
     'DenseSearchService',
-
     # Fusion Services
     'FusionService',
-    'NormalizationMethod',
-    'FusionMethod',
-
     # LLM Reranker
     'LLMRerankerService',
     'create_reranking_metadata',

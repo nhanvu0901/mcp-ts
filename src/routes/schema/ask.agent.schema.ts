@@ -5,7 +5,7 @@ export const AskAgentSchema = {
             "1. Query-based Mode (Traditional):\n" +
             "Submit natural language queries to the AI agent for intelligent document analysis, Q&A, and contextual responses. The agent will interpret your query and use appropriate tools to search, analyze, and respond based on your document collection.\n\n" +
             "2. Intent-based Mode (Direct Actions):\n" +
-            "Execute specific, deterministic actions without AI interpretation. Perfect for programmatic integrations, UI actions, and scenarios requiring predictable behavior.\n\n" +
+            "Execute specific, deterministic actions without AI decision to choose tools.\n\n" +
             "Available Intent Types:\n\n" +
             "• summarise - Generate document summaries with control over detail level or target word count\n" +
             "  - Requires: doc_id (specific document to summarize)\n" +

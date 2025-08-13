@@ -1,8 +1,7 @@
-import os
 import hashlib
 import time
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple
 from collections import defaultdict
 from langchain_openai import AzureChatOpenAI
 from .hybrid_search import HybridSearchService

@@ -4,17 +4,20 @@ from mcp.server.fastmcp import FastMCP
 from qdrant_client import QdrantClient
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 import logging
-import asyncio
 from typing import List, Any
 from utils.config import config
 import time
-# Import new utility services
-from utils.tfidf_search import TfidfService
-from utils.dense_search import DenseSearchService
-from utils.fusion_score import FusionService
-from utils.query_expansion import QueryExpansionService
-from utils.hybrid_search import HybridSearchService
-from utils.llm_reranker import LLMRerankerService, create_reranking_metadata
+
+from utils import (
+    HybridSearchService,
+    QueryExpansionService,
+    TfidfService,
+    DenseSearchService,
+    FusionService,
+    LLMRerankerService,
+    create_reranking_metadata
+)
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -61,7 +64,8 @@ hybrid_search_service = HybridSearchService(
     fusion_service
 )
 
-query_expansion_service = QueryExpansionService(llm_client,hybrid_search_service,fusion_service) if ENABLE_QUERY_EXPANSION else None
+query_expansion_service = QueryExpansionService(llm_client, hybrid_search_service,
+                                                fusion_service) if ENABLE_QUERY_EXPANSION else None
 reranker_service = LLMRerankerService(llm_client) if ENABLE_LLM_RERANKING else None
 
 
@@ -205,7 +209,6 @@ async def retrieve(query: str,
                     limit=search_limit
                 )
 
-
         if SIMILARITY_THRESHOLD > 0.0:
             initial_results = [r for r in initial_results if getattr(r, 'score', 0) >= SIMILARITY_THRESHOLD]
             logger.info(f"Applied similarity threshold {SIMILARITY_THRESHOLD}: {len(initial_results)} results remain")
@@ -299,14 +302,10 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
 if __name__ == "__main__":
     logger.info("RAG Service MCP server starting up...")
     mcp.run(transport="sse")
-
     # results = self.qdrant_client.query_points(
     #     collection_name=collection_id,
     #     query_vector=("text_dense", query_embedding),
     #     query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
     #     limit=limit
     # )
-
-    logger.debug(f"Dense search found {len(results)} results in {collection_id}")
-
     logger.info("RAG Service MCP server shut down.")
