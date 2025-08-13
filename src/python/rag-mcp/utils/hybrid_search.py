@@ -2,7 +2,6 @@ import asyncio
 import logging
 from typing import List, Any
 from qdrant_client import QdrantClient
-from qdrant_client.models import NamedSparseVector
 from langchain_openai import AzureOpenAIEmbeddings
 
 from .config import config
@@ -130,7 +129,8 @@ class HybridSearchService:
             try:
                 sparse_results = self.qdrant_client.query_points(
                     collection_name=collection_id,
-                    query_vector=NamedSparseVector(name="text_sparse", vector=sparse_vector),
+                    query=sparse_vector,
+                    using="text_sparse",
                     query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
                     limit=limit * 2
                 )

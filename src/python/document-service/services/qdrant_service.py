@@ -272,12 +272,21 @@ class QdrantService:
     def search_documents(self, query_vector: list, user_id: str, collection_id: str = None, limit: int = 10, dense_weight: float = 0.6):
         """Legacy method for backward compatibility - dense search only"""
         try:
-            search_results = self.client.search(
-                collection_name=collection_id or self.collection_name,
-                query_vector=query_vector if not self.enable_hybrid else ("text_dense", query_vector),
-                query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
-                limit=limit
-            )
+            if self.enable_hybrid:
+                search_results = self.client.query_points(
+                    collection_name=collection_id or self.collection_name,
+                    query=query_vector,
+                    using="text_dense",
+                    query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
+                    limit=limit
+                )
+            else:
+                search_results = self.client.query_points(
+                    collection_name=collection_id or self.collection_name,
+                    query=query_vector,
+                    query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
+                    limit=limit
+                )
             return search_results
         except Exception as e:
             print(f"Error searching documents: {e}")

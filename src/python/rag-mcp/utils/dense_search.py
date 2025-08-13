@@ -57,7 +57,8 @@ class DenseSearchService:
         try:
             results = self.qdrant_client.query_points(
                 collection_name=collection_id,
-                query_vector=("text_dense", query_embedding),
+                query=query_embedding,
+                using="text_dense",
                 query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
                 limit=limit
             )
@@ -86,7 +87,8 @@ class DenseSearchService:
                     limit: int = 10):
                 try:
                     results = await asyncio.wait_for(
-                        self.search_collection(
+                        asyncio.to_thread(
+                            self.search_collection,
                             query_embedding=query_embedding,
                             collection_id=collection_id,
                             user_id=user_id,
