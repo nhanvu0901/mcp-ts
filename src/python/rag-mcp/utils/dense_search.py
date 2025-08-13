@@ -55,13 +55,14 @@ class DenseSearchService:
             List of search results from Qdrant
         """
         try:
-            results = self.qdrant_client.query_points(
+            response = self.qdrant_client.query_points(
                 collection_name=collection_id,
                 query=query_embedding,
                 using="text_dense",
                 query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
                 limit=limit
             )
+            results = response.points if hasattr(response, 'points') else []
 
             logger.debug(f"Dense search found {len(results)} results in {collection_id}")
             return results

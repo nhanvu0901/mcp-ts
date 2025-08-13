@@ -127,13 +127,14 @@ class HybridSearchService:
 
         if sparse_vector and sparse_vector.indices:
             try:
-                sparse_results = self.qdrant_client.query_points(
+                response = self.qdrant_client.query_points(
                     collection_name=collection_id,
                     query=sparse_vector,
                     using="text_sparse",
                     query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
                     limit=limit * 2
                 )
+                sparse_results = response.points if hasattr(response, 'points') else []
                 logger.debug(f"Sparse search found {len(sparse_results)} results in {collection_id}")
             except Exception as e:
                 logger.warning(f"Sparse search failed for {collection_id}: {e}")

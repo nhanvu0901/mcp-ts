@@ -38,6 +38,9 @@ class RAGConfig:
     DEFAULT_NORMALIZATION: str = "min_max"
     SIMILARITY_THRESHOLD: float = 0.0
 
+    #Lite llm
+    LITELLM_PROXY_URL: str = os.getenv("LITELLM_PROXY_URL", "")
+    LITELLM_APP_KEY: str = os.getenv("LITELLM_APP_KEY", "")
     # TF-IDF Configuration
     TFIDF_MODELS_DIR: str = os.getenv("TFIDF_MODELS_DIR", "/app/tfidf_models")
 

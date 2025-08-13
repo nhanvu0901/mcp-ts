@@ -1,28 +1,18 @@
 import litellm
 import os
+
+
 class LLMClient:
-    """LLM Client for OpenAI/Azure integration"""
-    
     def __init__(self, model_name: str, api_key: str, num_retries: int = 3, **kwargs):
-        # Prepares the arguments for API calls
         self.default_args = {
             "model": model_name,
             "api_key": api_key,
             "num_retries": num_retries,
-            **kwargs,
         }
 
-        # Add Azure-specific arguments if needed
-        if model_name.startswith("azure/"):
-            api_base = kwargs.get("api_base", None)
-            api_version = kwargs.get("api_version", None)
-            if api_base and api_version:
-                self.default_args["api_base"] = api_base
-                self.default_args["api_version"] = api_version
-            else:
-                raise ValueError(
-                    "Both `api_base` and `api_version` must be provided for Azure models."
-                )
+        litellm_proxy_url = kwargs.get("litellm_proxy_url")
+        if litellm_proxy_url:
+            self.default_args["base_url"] = f"{litellm_proxy_url}/v1"
 
     def complete(self, messages, **kwargs):
         args = {**self.default_args, "messages": messages, **kwargs}
@@ -42,23 +32,12 @@ class LLMClient:
 
 
 def get_llm_client() -> LLMClient:
-    """Get LLM client based on environment configuration"""
-    azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
-    openai_api_key = os.getenv("OPENAI_API_KEY")
+    litellm_proxy_url = os.getenv("LITELLM_PROXY_URL")
+    litellm_app_key = os.getenv("LITELLM_APP_KEY")
+    model_name = os.getenv("AZURE_OPENAI_MODEL_NAME")
 
-    if azure_api_key:
-        return LLMClient(
-            f"azure/{os.getenv('AZURE_OPENAI_MODEL_NAME')}",
-            api_key=azure_api_key,
-            api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_version=os.getenv("AZURE_OPENAI_MODEL_API_VERSION"),
-        )
-    elif openai_api_key:
-        return LLMClient(
-            f"openai/{os.getenv('OPENAI_MODEL_NAME', 'gpt-4o-mini')}",
-            api_key=openai_api_key,
-        )
-    else:
-        raise EnvironmentError(
-            "No API key found. Set either AZURE_OPENAI_API_KEY or OPENAI_API_KEY in environment."
-        )
+    return LLMClient(
+        model_name,
+        api_key=litellm_app_key,
+        litellm_proxy_url=litellm_proxy_url,
+    )

@@ -3,7 +3,7 @@ import json
 from typing import Optional, Tuple
 import semchunk
 from motor.motor_asyncio import AsyncIOMotorClient
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 
 
 def get_chunker(max_token_chars: int = 1024):
@@ -16,7 +16,7 @@ def chunk_text(text: str, max_token_chars: int = 1024):
 
 
 class DocumentTranslator:
-    def __init__(self, mongo_client: AsyncIOMotorClient, llm_client: AzureChatOpenAI):
+    def __init__(self, mongo_client: AsyncIOMotorClient, llm_client: ChatOpenAI):
         self.mongo_client = mongo_client
         self.llm_client = llm_client
         self.db = mongo_client.ai_assistant
