@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from qdrant_client import QdrantClient
-from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
+from langchain_openai import AzureOpenAIEmbeddings
 import logging
 from typing import List, Any
 from utils.config import config
@@ -49,9 +49,7 @@ embedding_model = AzureOpenAIEmbeddings(
     **config.get_embedding_config()
 )
 
-llm_client = AzureChatOpenAI(
-    **config.get_llm_config()
-)
+llm_client = config.get_llm_config()
 
 # Initialize service classes
 tfidf_service = TfidfService(models_dir=TFIDF_MODELS_DIR)
@@ -66,7 +64,7 @@ hybrid_search_service = HybridSearchService(
 
 query_expansion_service = QueryExpansionService(llm_client, hybrid_search_service,
                                                 fusion_service) if ENABLE_QUERY_EXPANSION else None
-reranker_service = LLMRerankerService(llm_client) if ENABLE_LLM_RERANKING else None
+reranker_service = LLMRerankerService(config.get_reranker_config()) if ENABLE_LLM_RERANKING else None
 
 
 def format_results_response(results: List[Any], reranking_metadata: dict = None) -> str:
@@ -274,38 +272,10 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
     return await retrieve(query, user_id, collection_id, limit, "dense")
 
 
-# @mcp.tool()
-# async def retrieve_hybrid(query: str,
-#                           user_id: str,
-#                           collection_id: List[str],
-#                           limit: int = 5,
-#                           dense_weight: float = None,
-#                           normalization: str = None,
-#                           fusion_method: str = None) -> str:
-#     """
-#     Query using hybrid search (dense + sparse vectors).
-#
-#     Args:
-#         query: Text query to search for
-#         user_id: User ID to filter documents
-#         collection_id: List of collection IDs
-#         limit: Maximum number of results to return
-#         dense_weight: Weight for dense search (0.0-1.0)
-#         normalization: Score normalization method
-#
-#     Returns:
-#         Formatted text with inline citations
-#     """
-#     return await retrieve(query, user_id, collection_id, limit, "hybrid", dense_weight, normalization)
-
-
 if __name__ == "__main__":
     logger.info("RAG Service MCP server starting up...")
+    logger.info(f"Using LiteLLM proxy at: {config.LITELLM_PROXY_URL}")
+    logger.info(f"Query expansion: {'ENABLED' if ENABLE_QUERY_EXPANSION else 'DISABLED'}")
+    logger.info(f"LLM reranking: {'ENABLED' if ENABLE_LLM_RERANKING else 'DISABLED'}")
     mcp.run(transport="sse")
-    # results = self.qdrant_client.query_points(
-    #     collection_name=collection_id,
-    #     query_vector=("text_dense", query_embedding),
-    #     query_filter={"must": [{"key": "user_id", "match": {"value": user_id}}]},
-    #     limit=limit
-    # )
     logger.info("RAG Service MCP server shut down.")

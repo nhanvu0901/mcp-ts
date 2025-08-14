@@ -1,9 +1,8 @@
 import asyncio
-import json
 import logging
 import time
 from typing import List, Any, Tuple, Dict, Optional
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 from .config import config
 
 logger = logging.getLogger(__name__)
@@ -11,13 +10,13 @@ logger = logging.getLogger(__name__)
 
 class LLMRerankerService:
     """
-    LLM-powered reranking service using GPT-4o mini for relevance scoring.
+    LLM-powered reranking service using LiteLLM proxy for relevance scoring.
 
     Evaluates search candidates against user queries to improve result ranking
     through semantic understanding beyond traditional similarity metrics.
     """
 
-    def __init__(self, llm_client: AzureChatOpenAI):
+    def __init__(self, llm_client: ChatOpenAI):
         self.llm_client = llm_client
         self.batch_size = config.RERANKER_BATCH_SIZE
         self.max_tokens = config.RERANKER_MAX_TOKENS
@@ -70,7 +69,6 @@ class LLMRerankerService:
             query: User search query
             candidates: List of search result candidates
 
-        Returns:
         Returns:
             List of (result, score) tuples
         """

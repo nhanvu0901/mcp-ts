@@ -7,6 +7,7 @@ from langchain_openai import AzureChatOpenAI
 from .hybrid_search import HybridSearchService
 from .fusion_score import FusionService
 from .config import config
+from langchain_core.messages import HumanMessage, SystemMessage
 logger = logging.getLogger(__name__)
 
 
