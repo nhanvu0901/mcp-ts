@@ -32,7 +32,7 @@ class RAGConfig:
     AZURE_OPENAI_TEMPERATURE: str = 0.3
 
     # Search Configuration
-    DEFAULT_DENSE_WEIGHT: float = float(os.getenv("DENSE_WEIGHT", "0.6"))
+    DEFAULT_DENSE_WEIGHT: float = 0.6
     DEFAULT_SEARCH_TYPE: str = "hybrid"
     DEFAULT_FUSION_METHOD: str = "weighted"
     DEFAULT_NORMALIZATION: str = "min_max"
@@ -46,18 +46,18 @@ class RAGConfig:
 
     # Query Expansion Configuration
     ENABLE_QUERY_EXPANSION: bool = os.getenv("ENABLE_QUERY_EXPANSION", "false").lower() == "true"
-    MAX_QUERY_VARIANTS: int = int(os.getenv("MAX_QUERY_VARIANTS", "3"))
+    MAX_QUERY_VARIANTS: int =  3
     EXPANSION_FUSION_METHOD: str ="rrf"
 
     # LLM Reranker Configuration
     ENABLE_LLM_RERANKING: bool = os.getenv("ENABLE_LLM_RERANKING", "false").lower() == "true"
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    RERANKER_TOP_K: int = int(os.getenv("RERANKER_TOP_K", "20"))
-    RERANKER_TOP_N: int = int(os.getenv("RERANKER_TOP_N", "10"))
-    RERANKER_BATCH_SIZE: int = int(os.getenv("RERANKER_BATCH_SIZE", "5"))
-    RERANKER_TEMPERATURE: float = float(os.getenv("RERANKER_TEMPERATURE", "0.1"))
-    RERANKER_MAX_TOKENS: int = int(os.getenv("RERANKER_MAX_TOKENS", "10"))
-    RERANKER_TIMEOUT: int = int(os.getenv("RERANKER_TIMEOUT", "30"))
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL")
+    RERANKER_TOP_K: int = 20
+    RERANKER_TOP_N: int = 10
+    RERANKER_BATCH_SIZE: int = 5
+    RERANKER_TEMPERATURE: float = 0.1
+    RERANKER_MAX_TOKENS: int = 10
+    RERANKER_TIMEOUT: int = 30
 
     # Performance Configuration
     MAX_CONCURRENT_SEARCHES: int = 5

@@ -2,9 +2,8 @@ import os
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from motor.motor_asyncio import AsyncIOMotorClient
-from langchain_openai import ChatOpenAI
-
 from services.translation import DocumentTranslator
+from services.utils import get_llm_client
 
 load_dotenv()
 
@@ -14,24 +13,7 @@ if not mongo_uri:
 
 mongo_client = AsyncIOMotorClient(mongo_uri)
 
-litellm_proxy_url = os.getenv("LITELLM_PROXY_URL")
-litellm_app_key = os.getenv("LITELLM_APP_KEY")
-azure_model = os.getenv("AZURE_OPENAI_MODEL_NAME")
-
-# Validate required environment variables
-if not litellm_proxy_url:
-    raise ValueError("Missing required environment variable: LITELLM_PROXY_URL")
-if not litellm_app_key:
-    raise ValueError("Missing required environment variable: LITELLM_APP_KEY")
-if not azure_model:
-    raise ValueError("Missing required environment variable: LITELLM_DEFAULT_MODEL")
-
-llm_client = ChatOpenAI(
-    model=azure_model,
-    api_key=litellm_app_key,
-    base_url=f"{litellm_proxy_url}/v1",
-    temperature=0
-)
+llm_client = get_llm_client()
 
 translator = DocumentTranslator(mongo_client, llm_client)
 
@@ -44,10 +26,21 @@ mcp = FastMCP(
 
 @mcp.tool()
 async def translate_document(
-        user_id: str,
-        document_id: str,
-        target_lang: str
+    user_id: str,
+    document_id: str,
+    target_lang: str
 ) -> str:
+    """
+    Translate document to target language.
+
+    Args:
+        user_id: User ID for document access
+        document_id: Document ID to translate
+        target_lang: Target language for translation
+
+    Returns:
+        Translated document text with word count
+    """
     try:
         translated_text, word_count = await translator.translate_document(
             user_id=user_id,
@@ -60,9 +53,19 @@ async def translate_document(
 
 @mcp.tool()
 async def translate_text(
-        text: str,
-        target_lang: str
+    text: str,
+    target_lang: str
 ) -> str:
+    """
+    Translate raw text to target language.
+
+    Args:
+        text: Text to translate
+        target_lang: Target language for translation
+
+    Returns:
+        Translated text
+    """
     try:
         translated_text = await translator.translate_text(text, target_lang)
         return translated_text

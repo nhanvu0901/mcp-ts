@@ -3,6 +3,7 @@ import json
 from typing import Optional, Tuple
 import semchunk
 from motor.motor_asyncio import AsyncIOMotorClient
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 
@@ -55,8 +56,8 @@ JSON response:"""
         user_message = self.translate_prompt.format(chunk=chunk, target_lang=target_lang)
 
         messages = [
-            {"role": "system", "content": self.sys_prompt},
-            {"role": "user", "content": user_message},
+            SystemMessage(content=self.sys_prompt),
+            HumanMessage(content=user_message)
         ]
 
         try:
