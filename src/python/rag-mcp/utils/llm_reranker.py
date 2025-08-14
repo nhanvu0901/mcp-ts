@@ -234,7 +234,7 @@ def create_reranking_metadata(enabled: bool,
     """
     return {
         "enabled": enabled,
-        "model_used": config.RERANKER_MODEL_NAME if enabled else None,
+        "model_used": config.OPENAI_MODEL if enabled else None,
         "candidates_processed": candidates_processed,
         "final_results": final_results,
         "processing_time_ms": round(processing_time_ms, 2) if enabled else 0

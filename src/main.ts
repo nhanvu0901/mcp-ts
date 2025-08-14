@@ -218,7 +218,6 @@ async function setupMCPClient(): Promise<MultiServerMCPClient> {
             transport: 'sse',
         },
     });
-    console.log('Connecting to MCP servers...');
     return client;
 }
 

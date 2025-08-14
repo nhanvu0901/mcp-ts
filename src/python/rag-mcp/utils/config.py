@@ -39,7 +39,7 @@ class RAGConfig:
     SIMILARITY_THRESHOLD: float = 0.0
 
     #Lite llm
-    LITELLM_PROXY_URL: str = os.getenv("LITELLM_PROXY_URL", "")
+    LITELLM_PROXY_URL: str = os.getenv("LITELLM_PROXY_URL")
     LITELLM_APP_KEY: str = os.getenv("LITELLM_APP_KEY", "")
     # TF-IDF Configuration
     TFIDF_MODELS_DIR: str = os.getenv("TFIDF_MODELS_DIR", "/app/tfidf_models")
@@ -47,11 +47,11 @@ class RAGConfig:
     # Query Expansion Configuration
     ENABLE_QUERY_EXPANSION: bool = os.getenv("ENABLE_QUERY_EXPANSION", "false").lower() == "true"
     MAX_QUERY_VARIANTS: int = int(os.getenv("MAX_QUERY_VARIANTS", "3"))
-    EXPANSION_FUSION_METHOD: str = os.getenv("EXPANSION_FUSION_METHOD", "rrf")
+    EXPANSION_FUSION_METHOD: str ="rrf"
 
     # LLM Reranker Configuration
     ENABLE_LLM_RERANKING: bool = os.getenv("ENABLE_LLM_RERANKING", "false").lower() == "true"
-    RERANKER_MODEL_NAME: str = os.getenv("RERANKER_MODEL_NAME", "gpt-4o-mini")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     RERANKER_TOP_K: int = int(os.getenv("RERANKER_TOP_K", "20"))
     RERANKER_TOP_N: int = int(os.getenv("RERANKER_TOP_N", "10"))
     RERANKER_BATCH_SIZE: int = int(os.getenv("RERANKER_BATCH_SIZE", "5"))
@@ -112,7 +112,7 @@ class RAGConfig:
         return {
             "azure_endpoint": cls.AZURE_OPENAI_ENDPOINT,
             "api_key": cls.AZURE_OPENAI_API_KEY,
-            "azure_deployment": cls.RERANKER_MODEL_NAME,
+            "azure_deployment": cls.OPENAI_MODEL,
             "api_version": cls.AZURE_OPENAI_MODEL_API_VERSION,
             "temperature": cls.RERANKER_TEMPERATURE
         }
