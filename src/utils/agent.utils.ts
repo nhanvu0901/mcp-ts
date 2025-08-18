@@ -96,7 +96,12 @@ export class AgentUtils {
                 }
             }
         }
-
+        sourceReferences.sort((a, b) => {
+            if (a.page_number === undefined && b.page_number === undefined) return 0;
+            if (a.page_number === undefined) return 1;
+            if (b.page_number === undefined) return -1;
+            return a.page_number - b.page_number;
+        });
         return sourceReferences;
     }
 

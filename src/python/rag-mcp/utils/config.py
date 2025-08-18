@@ -60,7 +60,7 @@ class RAGConfig:
         """Get LiteLLM proxy configuration for LLM calls"""
         return ChatOpenAI(
             model=cls.AZURE_OPENAI_MODEL_NAME,
-            api_key=cls.LITELLM_APP_KEY or None,
+            api_key=cls.LITELLM_APP_KEY ,
             base_url=f"{cls.LITELLM_PROXY_URL}/v1",
             temperature=0.1,
             max_tokens=4000,
@@ -88,7 +88,7 @@ class RAGConfig:
     def get_reranker_config(cls) -> ChatOpenAI:
         """Get reranker-specific LLM configuration - now using LiteLLM"""
         return ChatOpenAI(
-            model=cls.OPENAI_MODEL or cls.AZURE_OPENAI_MODEL_NAME,
+            model=cls.OPENAI_MODEL,
             api_key=cls.LITELLM_APP_KEY or None,
             base_url=f"{cls.LITELLM_PROXY_URL}/v1",
             temperature=cls.RERANKER_TEMPERATURE,
