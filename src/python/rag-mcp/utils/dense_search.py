@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import List, Any
-from langchain_openai import AzureOpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from qdrant_client import QdrantClient
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ class DenseSearchService:
     for conceptual document retrieval.
     """
 
-    def __init__(self, embedding_model: AzureOpenAIEmbeddings, qdrant_client: QdrantClient):
+    def __init__(self, embedding_model: OpenAIEmbeddings, qdrant_client: QdrantClient):
         self.embedding_model = embedding_model
         self.qdrant_client = qdrant_client
 

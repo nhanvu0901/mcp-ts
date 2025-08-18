@@ -2,7 +2,6 @@ import os
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from qdrant_client import QdrantClient
-from langchain_openai import AzureOpenAIEmbeddings
 import logging
 from typing import List, Any
 from utils.config import config
@@ -22,19 +21,21 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
 ENABLE_QUERY_EXPANSION = os.getenv("ENABLE_QUERY_EXPANSION", "false").lower() == "true"
+
 # Search Configuration
 DEFAULT_DENSE_WEIGHT = config.DEFAULT_DENSE_WEIGHT
 DEFAULT_SEARCH_TYPE = config.DEFAULT_SEARCH_TYPE
-
 SIMILARITY_THRESHOLD = config.SIMILARITY_THRESHOLD
 DEFAULT_NORMALIZATION = config.DEFAULT_NORMALIZATION
 EXPANSION_FUSION_METHOD = config.EXPANSION_FUSION_METHOD
 DEFAULT_FUSION_METHOD = config.DEFAULT_FUSION_METHOD
+
 # TF-IDF Configuration
 TFIDF_MODELS_DIR = config.TFIDF_MODELS_DIR
-
 ENABLE_LLM_RERANKING = config.ENABLE_LLM_RERANKING
+
 # Initialize MCP Server
 mcp = FastMCP(
     config.SERVICE_NAME,
@@ -45,9 +46,8 @@ mcp = FastMCP(
 # Initialize clients and services
 qdrant_client = QdrantClient(**config.get_qdrant_config())
 
-embedding_model = AzureOpenAIEmbeddings(
-    **config.get_embedding_config()
-)
+# Use the new embedding model configuration through LiteLLM proxy
+embedding_model = config.get_embedding_model()
 
 llm_client = config.get_llm_config()
 
@@ -275,6 +275,7 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
 if __name__ == "__main__":
     logger.info("RAG Service MCP server starting up...")
     logger.info(f"Using LiteLLM proxy at: {config.LITELLM_PROXY_URL}")
+    logger.info(f"Embedding model via LiteLLM: {config.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}")
     logger.info(f"Query expansion: {'ENABLED' if ENABLE_QUERY_EXPANSION else 'DISABLED'}")
     logger.info(f"LLM reranking: {'ENABLED' if ENABLE_LLM_RERANKING else 'DISABLED'}")
     mcp.run(transport="sse")

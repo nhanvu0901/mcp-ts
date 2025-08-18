@@ -1,7 +1,7 @@
 import os
 from typing import List
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI, AzureOpenAIEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 # Load environment variables
 load_dotenv()
@@ -19,13 +19,8 @@ class RAGConfig:
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
 
-    AZURE_OPENAI_EMBEDDING_ENDPOINT: str = os.getenv("AZURE_OPENAI_EMBEDDING_ENDPOINT", "")
-    AZURE_OPENAI_EMBEDDING_API_KEY: str = os.getenv("AZURE_OPENAI_EMBEDDING_API_KEY", "")
-    AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION: str = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION", "")
-
-    # Model names
-    AZURE_OPENAI_MODEL_NAME: str = os.getenv("AZURE_OPENAI_MODEL_NAME", "")
-    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "")
+    AZURE_OPENAI_MODEL_NAME: str = os.getenv("AZURE_OPENAI_MODEL_NAME")
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
     AZURE_OPENAI_TEMPERATURE: float = 0.3
 
     # Search Configuration
@@ -57,7 +52,6 @@ class RAGConfig:
     RERANKER_MAX_TOKENS: int = 10
     RERANKER_TIMEOUT: int = 30
 
-
     MAX_CONCURRENT_SEARCHES: int = 5
     SEARCH_TIMEOUT: int = 30
 
@@ -80,14 +74,15 @@ class RAGConfig:
         return cls.get_litellm_config()
 
     @classmethod
-    def get_embedding_config(cls) -> dict:
-        """Get embedding model configuration - still using Azure directly for embeddings"""
-        return {
-            "model": cls.AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
-            "azure_endpoint": cls.AZURE_OPENAI_EMBEDDING_ENDPOINT,
-            "api_key": cls.AZURE_OPENAI_EMBEDDING_API_KEY,
-            "openai_api_version": cls.AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION
-        }
+    def get_embedding_model(cls) -> OpenAIEmbeddings:
+        """Get configured embedding model using LiteLLM proxy"""
+        return OpenAIEmbeddings(
+            model=cls.AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+            openai_api_base=f"{cls.LITELLM_PROXY_URL}/v1",
+            openai_api_key=cls.LITELLM_APP_KEY,
+            timeout=30.0,
+            max_retries=3
+        )
 
     @classmethod
     def get_reranker_config(cls) -> ChatOpenAI:
@@ -115,10 +110,6 @@ class RAGConfig:
         required_vars = [
             "LITELLM_PROXY_URL",
             "AZURE_OPENAI_MODEL_NAME",
-            "AZURE_OPENAI_EMBEDDING_DEPLOYMENT",
-            "AZURE_OPENAI_EMBEDDING_ENDPOINT",
-            "AZURE_OPENAI_EMBEDDING_API_KEY",
-            "AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION"
         ]
 
         missing_vars = []

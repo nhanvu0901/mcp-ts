@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import List, Any
 from qdrant_client import QdrantClient
-from langchain_openai import AzureOpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 from .config import config
 from .tfidf_search import TfidfService
@@ -19,7 +19,7 @@ class HybridSearchService:
 
     def __init__(self,
                  qdrant_client: QdrantClient,
-                 embedding_model: AzureOpenAIEmbeddings,
+                 embedding_model: OpenAIEmbeddings,
                  tfidf_service: TfidfService,
                  fusion_service: FusionService):
         self.qdrant_client = qdrant_client

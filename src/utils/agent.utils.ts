@@ -58,7 +58,7 @@ export class AgentUtils {
         const sourceReferences: SourceReference[] = [];
         const seenRefs = new Set<string>();
 
-        const citationPattern = /SOURCE_CITATION:\s*\\cite\{([^,]+),\s*(page|chunk)\s*([\d\-]+)\}/g;
+        const citationPattern = /(?:SOURCE_CITATION:\s*)?\\cite\{([^,]+),\s*(page|chunk)\s*([\d\-]+)\}/g;
 
         for (const match of responseText.matchAll(citationPattern)) {
             const documentName = match[1].trim();
