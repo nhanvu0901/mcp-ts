@@ -1,0 +1,202 @@
+services:
+    gateway:
+        build:
+            context: .
+            dockerfile: ./apps/gateway/Dockerfile
+        container_name: gateway
+        restart: unless-stopped
+        ports:
+            - "3000:3000"
+        env_file:
+            - .env
+        environment:
+            - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
+            - RAG_MCP_URL=http://rag-mcp:8002/sse
+            - DOCDB_SUMMARIZATION_MCP_URL=http://summarization-mcp:8003/sse
+            - DOCUMENT_TRANSLATION_MCP_URL=http://translation-mcp:8004/sse
+            - LITELLM_PROXY_URL=http://litellm:4000
+            - LITELLM_APP_KEY=${LITELLM_APP_KEY}
+            - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+            - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
+            - AZURE_OPENAI_MODEL_API_VERSION=${AZURE_OPENAI_MODEL_API_VERSION}
+        depends_on:
+            - mongodb
+            - qdrant
+            - rag-mcp
+            - summarization-mcp
+            - translation-mcp
+
+    document:
+        build:
+            context: .
+            dockerfile: ./apps/document/Dockerfile
+        container_name: document
+        restart: unless-stopped
+        ports:
+            - "8000:8000"
+        env_file:
+            - .env
+        environment:
+            - MONGODB_URI=${MONGODB_URI}
+            - MONGODB_DB=${MONGODB_DB}
+            - QDRANT_HOST=${QDRANT_HOST}
+            - QDRANT_PORT=${QDRANT_PORT}
+            - LITELLM_PROXY_URL=http://litellm:4000
+            - LITELLM_APP_KEY=${LITELLM_APP_KEY}
+            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
+            - AZURE_OPENAI_EMBEDDING_DEPLOYMENT=${AZURE_OPENAI_EMBEDDING_DEPLOYMENT}
+            - OPENAI_MODEL=${OPENAI_MODEL}
+            - UPLOAD_DIR=${UPLOAD_DIR}
+        volumes:
+            - ./data/uploads:/app/data/uploads:rw
+            - ./data/tfidf_models:/app/tfidf_models:rw
+        depends_on:
+            - qdrant
+            - mongodb
+            - litellm
+
+    rag-mcp:
+        build:
+            context: .
+            dockerfile: ./mcps/rag-mcp/Dockerfile
+        container_name: rag-mcp
+        restart: unless-stopped
+        ports:
+            - "8002:8002"
+        env_file:
+            - .env
+        environment:
+            - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
+            - MONGODB_DB=${MONGODB_DB}
+            - QDRANT_HOST=${QDRANT_HOST}
+            - QDRANT_PORT=${QDRANT_PORT}
+            - LITELLM_PROXY_URL=http://litellm:4000
+            - LITELLM_APP_KEY=${LITELLM_APP_KEY}
+            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
+            - AZURE_OPENAI_EMBEDDING_DEPLOYMENT=${AZURE_OPENAI_EMBEDDING_DEPLOYMENT}
+            - OPENAI_MODEL=${OPENAI_MODEL}
+            - ENABLE_QUERY_EXPANSION=${ENABLE_QUERY_EXPANSION}
+            - ENABLE_LLM_RERANKING=${ENABLE_LLM_RERANKING}
+        depends_on:
+            - mongodb
+            - qdrant
+            - litellm
+
+    summarization-mcp:
+        build:
+            context: .
+            dockerfile: ./mcps/summarization-mcp/Dockerfile
+        container_name: summarization-mcp
+        restart: unless-stopped
+        ports:
+            - "8003:8003"
+        env_file:
+            - .env
+        environment:
+            - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
+            - MONGODB_DB=${MONGODB_DB}
+            - QDRANT_HOST=${QDRANT_HOST}
+            - QDRANT_PORT=${QDRANT_PORT}
+            - LITELLM_PROXY_URL=http://litellm:4000
+            - LITELLM_APP_KEY=${LITELLM_APP_KEY}
+            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
+            - OPENAI_MODEL=${OPENAI_MODEL}
+        depends_on:
+            - mongodb
+            - qdrant
+            - litellm
+
+    translation-mcp:
+        build:
+            context: .
+            dockerfile: ./mcps/translation-mcp/Dockerfile
+        container_name: translation-mcp
+        restart: unless-stopped
+        ports:
+            - "8004:8004"
+        env_file:
+            - .env
+        environment:
+            - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
+            - MONGODB_DB=${MONGODB_DB}
+            - QDRANT_HOST=${QDRANT_HOST}
+            - QDRANT_PORT=${QDRANT_PORT}
+            - LITELLM_PROXY_URL=http://litellm:4000
+            - LITELLM_APP_KEY=${LITELLM_APP_KEY}
+            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
+            - OPENAI_MODEL=${OPENAI_MODEL}
+        depends_on:
+            - mongodb
+            - qdrant
+            - litellm
+
+    postgres:
+        image: postgres:15-alpine
+        container_name: postgres
+        restart: unless-stopped
+        ports:
+            - "5432:5432"
+        environment:
+            POSTGRES_DB: litellm
+            POSTGRES_USER: litellm_user
+            POSTGRES_PASSWORD: litellm_password
+            POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+
+    litellm:
+        image: ghcr.io/berriai/litellm:main-latest
+        container_name: litellm
+        restart: unless-stopped
+        ports:
+            - "4000:4000"
+        environment:
+            DATABASE_URL: "postgresql://litellm_user:litellm_password@postgres:5432/litellm"
+            STORE_MODEL_IN_DB: "True"
+            DISABLE_DATABASE: "False"
+            LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+            LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+            LITELLM_APP_KEY: ${LITELLM_APP_KEY}
+            LITELLM_LOG: ${LITELLM_LOG}
+            AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+            AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+            AZURE_OPENAI_MODEL_API_VERSION: ${AZURE_OPENAI_MODEL_API_VERSION}
+            AZURE_OPENAI_EMBEDDING_API_KEY: ${AZURE_OPENAI_EMBEDDING_API_KEY}
+            AZURE_OPENAI_EMBEDDING_ENDPOINT: ${AZURE_OPENAI_EMBEDDING_ENDPOINT}
+            AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION: ${AZURE_OPENAI_EMBEDDING_MODEL_API_VERSION}
+            LITELLM_UI: ${LITELLM_UI}
+            LITELLM_DEBUG: ${LITELLM_DEBUG}
+        volumes:
+            - ./litellm.yaml:/app/config.yaml:ro
+        depends_on:
+            - postgres
+        command: [ "--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1" ]
+
+    mongodb:
+        image: mongo:8.0.11
+        container_name: mongodb
+        restart: unless-stopped
+        ports:
+            - "27017:27017"
+        environment:
+            MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+            MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+            MONGO_INITDB_DATABASE: ai_assistant
+        volumes:
+            - mongodb_data:/data/db
+            - ./mongo.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+
+    qdrant:
+        image: qdrant/qdrant:latest
+        container_name: qdrant
+        restart: unless-stopped
+        ports:
+            - "6333:6333"
+        volumes:
+            - qdrant_data:/qdrant/storage
+
+volumes:
+    mongodb_data:
+    qdrant_data:
+    postgres_data:

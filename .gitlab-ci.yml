@@ -1,0 +1,342 @@
+image: docker.asseco-ce.com/ai_dev/docker/python_node:python3.13-nodejs24
+
+variables:
+    DOCKER_TAG: docker.asseco-ce.com/ai_dev/ai_hub/ai-gateway
+    CHANGED_PROJECTS: ""
+    DEPLOYMENT_CROSSROADS: https://gitlab/ai/AI_HUB/deployment-crossroads
+
+stages:
+    - build
+    - image
+    - deploy
+
+lint:
+    stage: build
+    script:
+        - echo "Installing dependencies..."
+        - npm ci --legacy-peer-deps
+        - echo "Running linting..."
+        - npx nx run-many --target=lint
+    allow_failure: true
+
+# test:
+#     stage: build
+#     script:
+#         - echo "Running tests..."
+#         - npx nx test
+
+detect-changes:
+    stage: build
+    script:
+        - echo "Detecting changes since last commit..."
+        - export CHANGED_PROJECTS=$(git diff --name-only HEAD~1 HEAD | grep -E '^apps/gateway|^apps/document|^mcps/translation-mcp|^mcps/summarization-mcp|^mcps/rag-mcp' | cut -d'/' -f1-2 | uniq)
+        - echo "CHANGED_PROJECTS=$CHANGED_PROJECTS" > .env
+        - echo "CHANGED_PROJECTS=$CHANGED_PROJECTS"
+    artifacts:
+        reports:
+            dotenv: .env
+        paths:
+            - .env
+
+build:
+    stage: build
+    script:
+        - echo "Setting up Python virtual environment..."
+        - python3 -m venv venv
+        - source venv/bin/activate
+
+        # Inštalácia Python závislostí
+        - echo "Installing Python dependencies..."
+        - pip install -r requirements.txt
+
+        # Inštalácia Node.js závislostí
+        - echo "Installing Node.js dependencies..."
+        - npm ci --legacy-peer-deps
+
+        # Spustenie build procesu
+        - echo "Building the project..."
+        - npx nx run-many --target=build
+    artifacts:
+        paths:
+            - apps/gateway/dist
+
+docker-build-gateway:
+    stage: image
+    image:
+        name: "docker.asseco-ce.com/ai_dev/docker/gcr.io-kaniko-project-executor:v1.23.2-debug"
+        entrypoint: [""]
+    dependencies:
+        - build
+        - detect-changes
+    before_script:
+        - mkdir -p /kaniko/.docker
+        - export PKG_VERSION=$(grep '"version"' apps/gateway/package.json | head -1 | sed 's/[^0-9.]*\([0-9.]*\).*/\1/')
+        - |
+            if [[ "$CI_COMMIT_BRANCH" == "develop" ]]; then
+              export PKG_VERSION=$PKG_VERSION-$CI_COMMIT_SHORT_SHA
+            fi
+        - export DOCKER_IMAGE_NAME=$DOCKER_TAG/gateway:$PKG_VERSION
+        - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" >> .env
+        - echo "PKG_VERSION=$PKG_VERSION" >> .env
+        - echo $DOCKER_AUTH_CONFIG > /kaniko/.docker/config.json
+    script:
+        - ls -la apps/gateway/dist
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"apps/gateway"* ]]; then
+            echo "Building Docker image for Gateway...";
+            /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/apps/gateway/Dockerfile" --destination "$DOCKER_IMAGE_NAME";
+          else
+            echo "No changes detected for Gateway. Skipping build.";
+            exit 0;
+          fi
+    artifacts:
+        reports:
+            dotenv: .env
+        paths:
+            - .env
+    rules:
+        - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "feature/cicd"'
+          exists:
+              - apps/gateway/Dockerfile
+
+docker-build-document:
+    stage: image
+    image:
+        name: "docker.asseco-ce.com/ai_dev/docker/gcr.io-kaniko-project-executor:v1.23.2-debug"
+        entrypoint: [""]
+    dependencies:
+        - detect-changes
+    before_script:
+        - mkdir -p /kaniko/.docker
+        - export PKG_VERSION=$(grep '^version =' apps/document/pyproject.toml | head -1 | sed 's/[^0-9.]*\([0-9.]*\).*/\1/')
+        - |
+            if [[ "$CI_COMMIT_BRANCH" == "develop" ]]; then
+              export PKG_VERSION=$PKG_VERSION-$CI_COMMIT_SHORT_SHA
+            fi
+        - export DOCKER_IMAGE_NAME=$DOCKER_TAG/document:$PKG_VERSION
+        - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" >> .env
+        - echo "PKG_VERSION=$PKG_VERSION" >> .env
+        - echo $DOCKER_AUTH_CONFIG > /kaniko/.docker/config.json
+    script:
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"apps/document"* ]]; then
+            echo "Building Docker image for Document...";
+            /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/apps/document/Dockerfile" --destination "$DOCKER_IMAGE_NAME";
+          else
+            echo "No changes detected for Document. Skipping build.";
+            exit 0;
+          fi
+    artifacts:
+        reports:
+            dotenv: .env
+        paths:
+            - .env
+    rules:
+        - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "feature/cicd"'
+          exists:
+              - apps/document/Dockerfile
+
+docker-build-translation-mcp:
+    stage: image
+    image:
+        name: "docker.asseco-ce.com/ai_dev/docker/gcr.io-kaniko-project-executor:v1.23.2-debug"
+        entrypoint: [""]
+    dependencies:
+        - detect-changes
+    before_script:
+        - mkdir -p /kaniko/.docker
+        - export PKG_VERSION=$(grep '^version =' mcps/translation-mcp/pyproject.toml | head -1 | sed 's/[^0-9.]*\([0-9.]*\).*/\1/')
+        - |
+            if [[ -n "$CHANGED_PROJECTS" && "$CI_COMMIT_BRANCH" == "develop" ]]; then
+              export PKG_VERSION=$PKG_VERSION-$CI_COMMIT_SHORT_SHA
+            fi
+        - export DOCKER_IMAGE_NAME=$DOCKER_TAG/translation-mcp:$PKG_VERSION
+        - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" >> .env
+        - echo "PKG_VERSION=$PKG_VERSION" >> .env
+        - echo $DOCKER_AUTH_CONFIG > /kaniko/.docker/config.json
+    script:
+        - if [[ "$CHANGED_PROJECTS" == *"mcps/translation-mcp"* ]]; then
+            echo "Building Docker image for Translation MCP...";
+            /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/mcps/translation-mcp/Dockerfile" --destination "$DOCKER_IMAGE_NAME";
+          else
+            echo "No changes detected for Translation MCP. Skipping build.";
+            exit 0;
+          fi
+    artifacts:
+        reports:
+            dotenv: .env
+        paths:
+            - .env
+    rules:
+        - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "feature/cicd"'
+          exists:
+              - mcps/translation-mcp/Dockerfile
+
+docker-build-summarization-mcp:
+    stage: image
+    image:
+        name: "docker.asseco-ce.com/ai_dev/docker/gcr.io-kaniko-project-executor:v1.23.2-debug"
+        entrypoint: [""]
+    dependencies:
+        - detect-changes
+    before_script:
+        - mkdir -p /kaniko/.docker
+        - export PKG_VERSION=$(grep '^version =' mcps/summarization-mcp/pyproject.toml | head -1 | sed 's/[^0-9.]*\([0-9.]*\).*/\1/')
+        - |
+            if [[ -n "$CHANGED_PROJECTS" && "$CI_COMMIT_BRANCH" == "develop" ]]; then
+              export PKG_VERSION=$PKG_VERSION-$CI_COMMIT_SHORT_SHA
+            fi
+        - export DOCKER_IMAGE_NAME=$DOCKER_TAG/summarization-mcp:$PKG_VERSION
+        - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" >> .env
+        - echo "PKG_VERSION=$PKG_VERSION" >> .env
+        - echo $DOCKER_AUTH_CONFIG > /kaniko/.docker/config.json
+    script:
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"mcps/summarization-mcp"* ]]; then
+            echo "Building Docker image for Summarization MCP...";
+            /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/mcps/summarization-mcp/Dockerfile" --destination "$DOCKER_IMAGE_NAME";
+          else
+            echo "No changes detected for Summarization MCP. Skipping build.";
+            exit 0;
+          fi
+    artifacts:
+        reports:
+            dotenv: .env
+        paths:
+            - .env
+    rules:
+        - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "feature/cicd"'
+          exists:
+              - mcps/summarization-mcp/Dockerfile
+
+docker-build-rag-mcp:
+    stage: image
+    image:
+        name: "docker.asseco-ce.com/ai_dev/docker/gcr.io-kaniko-project-executor:v1.23.2-debug"
+        entrypoint: [""]
+    dependencies:
+        - detect-changes
+    before_script:
+        - mkdir -p /kaniko/.docker
+        - export PKG_VERSION=$(grep '^version =' mcps/rag-mcp/pyproject.toml | head -1 | sed 's/[^0-9.]*\([0-9.]*\).*/\1/')
+        - |
+            if [[ "$CI_COMMIT_BRANCH" == "develop" ]]; then
+              export PKG_VERSION=$PKG_VERSION-$CI_COMMIT_SHORT_SHA
+            fi
+        - export DOCKER_IMAGE_NAME=$DOCKER_TAG/rag-mcp:$PKG_VERSION
+        - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" >> .env
+        - echo "PKG_VERSION=$PKG_VERSION" >> .env
+        - echo $DOCKER_AUTH_CONFIG > /kaniko/.docker/config.json
+    script:
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"mcps/rag-mcp"* ]]; then
+            echo "Building Docker image for RAG MCP...";
+            /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/mcps/rag-mcp/Dockerfile" --destination "$DOCKER_IMAGE_NAME";
+          else
+            echo "No changes detected for RAG MCP. Skipping build.";
+            exit 0;
+          fi
+    artifacts:
+        reports:
+            dotenv: .env
+        paths:
+            - .env
+    rules:
+        - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "feature/cicd"'
+          exists:
+              - mcps/rag-mcp/Dockerfile
+    
+deploy-gateway:
+    stage: deploy
+    script:
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"apps/gateway"* ]]; then
+            echo "Deploying Gateway...";
+            curl -X POST --fail --insecure -F token=$TRIGGER_TOKEN -F ref=main -F variables[PROJECT_NAME]=gateway -F variables[VERSION_NUMBER]=$PKG_VERSION -F variables[BRANCH_NAME]=$CI_COMMIT_BRANCH https://gitlab/api/v4/projects/6609/trigger/pipeline;
+          else
+            echo "No changes detected for Gateway. Skipping deploy.";
+            exit 0;
+          fi
+    needs:
+        - job: docker-build-gateway
+    when: on_success
+    only:
+        - main
+        - develop
+
+deploy-document:
+    stage: deploy
+    script:
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"apps/document"* ]]; then
+            echo "Deploying Document...";
+            curl -X POST --fail --insecure -F token=$TRIGGER_TOKEN -F ref=main -F variables[PROJECT_NAME]=document -F variables[VERSION_NUMBER]=$PKG_VERSION -F variables[BRANCH_NAME]=$CI_COMMIT_BRANCH https://gitlab/api/v4/projects/6609/trigger/pipeline;
+          else
+            echo "No changes detected for Document. Skipping deploy.";
+            exit 0;
+          fi
+    needs:
+        - job: docker-build-document
+        - job: deploy-gateway
+          optional: true
+    when: on_success
+    only:
+        - main
+        - develop
+
+deploy-translation-mcp:
+    stage: deploy
+    script:
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"mcps/translation-mcp"* ]]; then
+            echo "Deploying Translation MCP...";
+            curl -X POST --fail --insecure -F token=$TRIGGER_TOKEN -F ref=main -F variables[PROJECT_NAME]=translation-mcp -F variables[VERSION_NUMBER]=$PKG_VERSION -F variables[BRANCH_NAME]=$CI_COMMIT_BRANCH https://gitlab/api/v4/projects/6609/trigger/pipeline;
+          else
+            echo "No changes detected for Translation MCP. Skipping deploy.";
+            exit 0;
+          fi
+    needs:
+        - job: docker-build-translation-mcp
+        - job: deploy-document
+          optional: true
+    when: on_success
+    only:
+        - main
+        - develop
+
+deploy-summarization-mcp:
+    stage: deploy
+    script:
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"mcps/summarization-mcp"* ]]; then
+            echo "Deploying Summarization MCP...";
+            curl -X POST --fail --insecure -F token=$TRIGGER_TOKEN -F ref=main -F variables[PROJECT_NAME]=summarization-mcp -F variables[VERSION_NUMBER]=$PKG_VERSION -F variables[BRANCH_NAME]=$CI_COMMIT_BRANCH https://gitlab/api/v4/projects/6609/trigger/pipeline;
+          else
+            echo "No changes detected for Summarization MCP. Skipping deploy.";
+            exit 0;
+          fi
+    needs:
+        - job: docker-build-summarization-mcp
+        - job: deploy-translation-mcp
+          optional: true
+    when: on_success
+    only:
+        - main
+        - develop
+
+deploy-rag-mcp:
+    stage: deploy
+    script:
+        - if [[ -n "$CHANGED_PROJECTS" && "$CHANGED_PROJECTS" == *"mcps/rag-mcp"* ]]; then
+            echo "Deploying RAG MCP...";
+            curl -X POST --fail --insecure -F token=$TRIGGER_TOKEN -F ref=main -F variables[PROJECT_NAME]=rag-mcp -F variables[VERSION_NUMBER]=$PKG_VERSION -F variables[BRANCH_NAME]=$CI_COMMIT_BRANCH https://gitlab/api/v4/projects/6609/trigger/pipeline;
+          else
+            echo "No changes detected for RAG MCP. Skipping deploy.";
+            exit 0;
+          fi
+    needs:
+        - job: docker-build-rag-mcp
+        - job: deploy-summarization-mcp
+          optional: true
+    when: on_success
+    only:
+        - main
+        - develop
+
+# Optional cache to speed up builds
+cache:
+    paths:
+        - node_modules/
+        - dist/

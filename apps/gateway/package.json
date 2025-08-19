@@ -1,0 +1,78 @@
+{
+    "name": "@ai-gateway/gateway",
+    "version": "0.0.1",
+    "private": true,
+    "nx": {
+        "targets": {
+            "build": {
+                "executor": "@nx/esbuild:esbuild",
+                "outputs": [
+                    "{options.outputPath}"
+                ],
+                "defaultConfiguration": "production",
+                "options": {
+                    "platform": "node",
+                    "outputPath": "apps/gateway/dist",
+                    "format": [
+                        "cjs"
+                    ],
+                    "bundle": false,
+                    "main": "apps/gateway/src/main.ts",
+                    "tsConfig": "apps/gateway/tsconfig.app.json",
+                    "assets": [
+                        "apps/gateway/src/assets"
+                    ],
+                    "esbuildOptions": {
+                        "sourcemap": true,
+                        "outExtension": {
+                            ".js": ".js"
+                        }
+                    }
+                },
+                "configurations": {
+                    "development": {},
+                    "production": {
+                        "generateLockfile": true,
+                        "esbuildOptions": {
+                            "sourcemap": false,
+                            "outExtension": {
+                                ".js": ".js"
+                            }
+                        }
+                    }
+                }
+            },
+            "serve": {
+                "continuous": true,
+                "executor": "@nx/js:node",
+                "defaultConfiguration": "development",
+                "dependsOn": [
+                    "build"
+                ],
+                "options": {
+                    "buildTarget": "@ai-gateway/gateway:build",
+                    "runBuildTargetDependencies": false
+                },
+                "configurations": {
+                    "development": {
+                        "buildTarget": "@ai-gateway/gateway:build:development"
+                    },
+                    "production": {
+                        "buildTarget": "@ai-gateway/gateway:build:production"
+                    }
+                }
+            },
+            "test": {
+                "options": {
+                    "passWithNoTests": true
+                }
+            },
+            "docker-build": {
+                "dependsOn": [
+                    "build"
+                ],
+                "command": "docker build -f apps/gateway/Dockerfile . -t ai-gateway-gateway"
+            }
+        }
+    }
+}
