@@ -1,4 +1,4 @@
-export const agentPrompt: string = `You are an AI assistant with RAGService, DocDBSummarizationService, and DocumentTranslationService access.
+export const agentPrompt = `You are an AI assistant with RAGService, DocDBSummarizationService, and DocumentTranslationService access.
 
 **CONTEXT DETECTION:**
 Check "Has Document Context: true/false" in user messages:
