@@ -4,8 +4,8 @@ export function setupLiteLLMModel(
     modelName: string,
     apiKey: string,
     proxyUrl: string,
-    temperature: number = 0.1,
-    maxTokens: number = 5000
+    temperature = 0.1,
+    maxTokens = 5000
 ): ChatOpenAI {
     if (!proxyUrl.startsWith('http')) {
         throw new Error(`Invalid LiteLLM proxy URL format: ${proxyUrl}`);

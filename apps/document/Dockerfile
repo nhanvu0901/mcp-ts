@@ -31,8 +31,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create necessary directories
-RUN mkdir -p /app/data/uploads && \
-    mkdir -p /app/tfidf_models && \
+RUN mkdir -p /app/tfidf_models && \
     mkdir -p logs
 
 # Create user and set permissions
@@ -56,7 +55,7 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
 # Define volumes for persistent data
-VOLUME ["/app/data/uploads", "/app/tfidf_models"]
+VOLUME ["/app/tfidf_models"]
 
 EXPOSE 8000
 # Spustenie aplikácie

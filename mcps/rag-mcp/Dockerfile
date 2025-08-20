@@ -4,6 +4,8 @@ FROM docker.asseco-ce.com/ai_dev/docker/python_node:python3.13-nodejs24
 # Nastavenie pracovného adresára
 WORKDIR /app
 
+RUN mkdir -p /app/tfidf_models
+
 # Kopírovanie požiadaviek
 COPY requirements.txt requirements.txt
 
@@ -20,7 +22,8 @@ COPY mcps/rag-mcp/rag-mcp/ .
 ENV PYTHONUNBUFFERED=1
 ENV QDRANT_HOST=localhost
 
+VOLUME ["/app/tfidf_models"]
+
 EXPOSE 8002
 
-# Spustenie aplikácie
 CMD ["python", "server.py"]

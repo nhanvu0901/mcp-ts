@@ -4,7 +4,7 @@ from langchain_openai import ChatOpenAI
 def get_llm_client() -> ChatOpenAI:
     litellm_proxy_url = os.getenv("LITELLM_PROXY_URL")
     litellm_app_key = os.getenv("LITELLM_APP_KEY")
-    model_name = os.getenv("AZURE_OPENAI_MODEL_NAME")
+    model_name = os.getenv("LLM_CHAT_MODEL")
 
     return ChatOpenAI(
         model=model_name,

@@ -22,7 +22,7 @@ def get_litellm_client():
 
 def get_model_name():
     """Get model name from environment"""
-    return os.getenv("AZURE_OPENAI_MODEL_NAME")
+    return os.getenv("LLM_CHAT_MODEL")
 
 
 # Lazy initialization - clients created when needed, not at import time

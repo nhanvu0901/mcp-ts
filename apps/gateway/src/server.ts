@@ -7,7 +7,6 @@ import swaggerUi from "@fastify/swagger-ui";
 import {createReactAgent} from "@langchain/langgraph/prebuilt";
 import {MultiServerMCPClient} from "@langchain/mcp-adapters";
 import {MongoClient} from "mongodb";
-import {mkdir} from "fs/promises";
 import api from "./app/routes";
 import dotenv from "dotenv";
 import fp from "fastify-plugin";
@@ -16,8 +15,8 @@ import { ChatOpenAI } from "@langchain/openai";
 import { agentPrompt } from "./app/ai_prompt/mcp.agent.promp"
 dotenv.config();
 
-function cleanEnvVar(value: string | undefined, defaultValue: string = ""): string {
-    if (!value) return defaultValue;
+function cleanEnvVar(value: string | undefined): string {
+    if (!value) return '';
     return value.replace(/^["']|["']$/g, "").trim();
 }
 
@@ -31,7 +30,8 @@ const config = {
     LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL),
     LITELLM_MASTER_KEY: cleanEnvVar(process.env.LITELLM_MASTER_KEY),
     LITELLM_APP_KEY: cleanEnvVar(process.env.LITELLM_APP_KEY),
-    AZURE_OPENAI_MODEL_NAME: cleanEnvVar(process.env.AZURE_OPENAI_MODEL_NAME),
+
+    LLM_CHAT_MODEL: cleanEnvVar(process.env.LLM_CHAT_MODEL),
 
     // MCP Service URLs
     RAG_MCP_URL: process.env.RAG_MCP_URL || "http://localhost:8002/sse",
@@ -40,23 +40,12 @@ const config = {
 
     // Application Settings
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || "10485760"),
-    UPLOAD_DIR: process.env.UPLOAD_DIR || "./src/python/data/uploads",
-    TFIDF_MODELS_DIR: process.env.TFIDF_MODELS_DIR || "./src/python/data/tfidf_models",
     MONGODB_URI:
         process.env.MONGODB_URI ||
         "mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin",
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || "RAG",
 };
 
-async function setupDirectories() {
-    try {
-        await mkdir(config.UPLOAD_DIR, {recursive: true});
-        await mkdir(config.TFIDF_MODELS_DIR, {recursive: true})
-    } catch (error) {
-        console.error("Failed to create upload directory:", error);
-        throw error;
-    }
-}
 
 function validateConfig() {
     const required = ["LITELLM_PROXY_URL", "LITELLM_APP_KEY"];
@@ -181,7 +170,7 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
 
 function setupModel(): ChatOpenAI {
     return new ChatOpenAI({
-        model: config.AZURE_OPENAI_MODEL_NAME,
+        model: config.LLM_CHAT_MODEL,
         apiKey: config.LITELLM_APP_KEY,
         configuration: {
             baseURL: config.LITELLM_PROXY_URL + "/v1",
@@ -356,7 +345,6 @@ async function buildServer(): Promise<FastifyInstance> {
 
     await registerPlugins(server);
     await registerRoutes(server);
-    await setupDirectories();
     await setupDebugHooks(server);
 
     const gracefulShutdown = async (signal: string) => {
@@ -413,9 +401,9 @@ declare module "fastify" {
         agent: any;
     }
 }
-
-if (require.main === module) {
-    startServer();
+if(config.NODE_ENV === "development") {
+    if (require.main === module) {
+        startServer();
+    }
 }
-
 export default buildServer;

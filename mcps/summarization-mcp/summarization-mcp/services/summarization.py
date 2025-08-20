@@ -12,8 +12,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from .utils import get_llm_client
 
 detector = LanguageDetectorBuilder.from_all_languages().with_preloaded_language_models().build()
-OPENAI_MODEL: str = os.getenv("OPENAI_MODEL")
-encoding = tiktoken.encoding_for_model(OPENAI_MODEL)
+LLM_RERANKER_MODEL: str = os.getenv("LLM_RERANKER_MODEL")
+encoding = tiktoken.encoding_for_model(LLM_RERANKER_MODEL)
 
 
 class SummarizationLevel(Enum):

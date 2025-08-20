@@ -35,7 +35,7 @@ def get_embedding_model():
     """Get embedding model configuration using LiteLLM proxy"""
     litellm_proxy_url = os.getenv("LITELLM_PROXY_URL")
     litellm_app_key = os.getenv("LITELLM_APP_KEY")
-    embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+    embedding_deployment = os.getenv("LLM_EMBEDDING_MODEL")
 
     if not litellm_app_key:
         raise ValueError("LITELLM_APP_KEY environment variable is required")
@@ -886,7 +886,7 @@ async def health_check():
         "mongodb_db": mongo_service.db_name,
         "qdrant": qdrant_status,
         "litellm_proxy": litellm_status,
-        "embedding_model": os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+        "embedding_model": os.getenv("LLM_EMBEDDING_MODEL")
     }
 
 

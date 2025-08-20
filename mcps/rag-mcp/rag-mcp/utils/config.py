@@ -19,8 +19,8 @@ class RAGConfig:
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
 
-    AZURE_OPENAI_MODEL_NAME: str = os.getenv("AZURE_OPENAI_MODEL_NAME")
-    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+    LLM_CHAT_MODEL: str = os.getenv("LLM_CHAT_MODEL")
+    LLM_EMBEDDING_MODEL: str = os.getenv("LLM_EMBEDDING_MODEL")
     AZURE_OPENAI_TEMPERATURE: float = 0.3
 
     # Search Configuration
@@ -44,7 +44,7 @@ class RAGConfig:
 
     # LLM Reranker Configuration
     ENABLE_LLM_RERANKING: bool = os.getenv("ENABLE_LLM_RERANKING", "false").lower() == "true"
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "")
+    LLM_RERANKER_MODEL: str = os.getenv("LLM_RERANKER_MODEL", "")
     RERANKER_TOP_K: int = 20
     RERANKER_TOP_N: int = 10
     RERANKER_BATCH_SIZE: int = 5
@@ -59,7 +59,7 @@ class RAGConfig:
     def get_litellm_config(cls) -> ChatOpenAI:
         """Get LiteLLM proxy configuration for LLM calls"""
         return ChatOpenAI(
-            model=cls.AZURE_OPENAI_MODEL_NAME,
+            model=cls.LLM_CHAT_MODEL,
             api_key=cls.LITELLM_APP_KEY ,
             base_url=f"{cls.LITELLM_PROXY_URL}/v1",
             temperature=0.1,
@@ -77,7 +77,7 @@ class RAGConfig:
     def get_embedding_model(cls) -> OpenAIEmbeddings:
         """Get configured embedding model using LiteLLM proxy"""
         return OpenAIEmbeddings(
-            model=cls.AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+            model=cls.LLM_EMBEDDING_MODEL,
             openai_api_base=f"{cls.LITELLM_PROXY_URL}/v1",
             openai_api_key=cls.LITELLM_APP_KEY,
             timeout=30.0,
@@ -88,7 +88,7 @@ class RAGConfig:
     def get_reranker_config(cls) -> ChatOpenAI:
         """Get reranker-specific LLM configuration - now using LiteLLM"""
         return ChatOpenAI(
-            model=cls.OPENAI_MODEL,
+            model=cls.LLM_RERANKER_MODEL,
             api_key=cls.LITELLM_APP_KEY or None,
             base_url=f"{cls.LITELLM_PROXY_URL}/v1",
             temperature=cls.RERANKER_TEMPERATURE,
@@ -109,7 +109,7 @@ class RAGConfig:
         """Validate required configuration and return list of missing variables"""
         required_vars = [
             "LITELLM_PROXY_URL",
-            "AZURE_OPENAI_MODEL_NAME",
+            "LLM_CHAT_MODEL",
         ]
 
         missing_vars = []

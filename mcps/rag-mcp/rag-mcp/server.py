@@ -271,7 +271,7 @@ async def retrieve_dense(query: str, user_id: str, collection_id: List[str], lim
 if __name__ == "__main__":
     logger.info("RAG Service MCP server starting up...")
     logger.info(f"Using LiteLLM proxy at: {config.LITELLM_PROXY_URL}")
-    logger.info(f"Embedding model via LiteLLM: {config.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}")
+    logger.info(f"Embedding model via LiteLLM: {config.LLM_EMBEDDING_MODEL}")
     logger.info(f"Query expansion: {'ENABLED' if ENABLE_QUERY_EXPANSION else 'DISABLED'}")
     logger.info(f"LLM reranking: {'ENABLED' if ENABLE_LLM_RERANKING else 'DISABLED'}")
     mcp.run(transport="sse")

@@ -11,6 +11,8 @@ services:
             - .env
         environment:
             - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
+            - ALLOWED_ORIGINS=http://localhost:3000
+            - NODE_ENV=production
             - RAG_MCP_URL=http://rag-mcp:8002/sse
             - DOCDB_SUMMARIZATION_MCP_URL=http://summarization-mcp:8003/sse
             - DOCUMENT_TRANSLATION_MCP_URL=http://translation-mcp:8004/sse
@@ -18,7 +20,7 @@ services:
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
             - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
             - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
-            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
+            - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
             - AZURE_OPENAI_MODEL_API_VERSION=${AZURE_OPENAI_MODEL_API_VERSION}
         depends_on:
             - mongodb
@@ -38,19 +40,17 @@ services:
         env_file:
             - .env
         environment:
-            - MONGODB_URI=${MONGODB_URI}
+            - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
             - MONGODB_DB=${MONGODB_DB}
             - QDRANT_HOST=${QDRANT_HOST}
             - QDRANT_PORT=${QDRANT_PORT}
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
-            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
-            - AZURE_OPENAI_EMBEDDING_DEPLOYMENT=${AZURE_OPENAI_EMBEDDING_DEPLOYMENT}
-            - OPENAI_MODEL=${OPENAI_MODEL}
-            - UPLOAD_DIR=${UPLOAD_DIR}
+            - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
+            - LLM_EMBEDDING_MODEL=${LLM_EMBEDDING_MODEL}
+            - LLM_RERANKER_MODEL=${LLM_RERANKER_MODEL}
         volumes:
-            - ./data/uploads:/app/data/uploads:rw
-            - ./data/tfidf_models:/app/tfidf_models:rw
+            - ./tmp:/app/tfidf_models:rw
         depends_on:
             - qdrant
             - mongodb
@@ -73,11 +73,13 @@ services:
             - QDRANT_PORT=${QDRANT_PORT}
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
-            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
-            - AZURE_OPENAI_EMBEDDING_DEPLOYMENT=${AZURE_OPENAI_EMBEDDING_DEPLOYMENT}
-            - OPENAI_MODEL=${OPENAI_MODEL}
+            - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
+            - LLM_EMBEDDING_MODEL=${LLM_EMBEDDING_MODEL}
+            - LLM_RERANKER_MODEL=${LLM_RERANKER_MODEL}
             - ENABLE_QUERY_EXPANSION=${ENABLE_QUERY_EXPANSION}
             - ENABLE_LLM_RERANKING=${ENABLE_LLM_RERANKING}
+        volumes:
+            - ./tmp:/app/tfidf_models:rw
         depends_on:
             - mongodb
             - qdrant
@@ -100,8 +102,8 @@ services:
             - QDRANT_PORT=${QDRANT_PORT}
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
-            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
-            - OPENAI_MODEL=${OPENAI_MODEL}
+            - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
+            - LLM_RERANKER_MODEL=${LLM_RERANKER_MODEL}
         depends_on:
             - mongodb
             - qdrant
@@ -124,8 +126,8 @@ services:
             - QDRANT_PORT=${QDRANT_PORT}
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
-            - AZURE_OPENAI_MODEL_NAME=${AZURE_OPENAI_MODEL_NAME}
-            - OPENAI_MODEL=${OPENAI_MODEL}
+            - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
+            - LLM_RERANKER_MODEL=${LLM_RERANKER_MODEL}
         depends_on:
             - mongodb
             - qdrant

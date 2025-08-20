@@ -1,6 +1,6 @@
 model_list:
     # Azure OpenAI Chat Models - USING CORRECT LiteLLM ENV SYNTAX
-    - model_name: ace-gpt-4o
+    - model_name: gpt-4o
       litellm_params:
           model: azure/ace-gpt-4o
           api_base: https://aceai-dev-swedencentral.openai.azure.com

@@ -21,5 +21,5 @@ ENV PYTHONUNBUFFERED=1
 ENV QDRANT_HOST=localhost
 
 EXPOSE 8004
-# Spustenie aplikácie
+
 CMD ["python", "server.py"]
