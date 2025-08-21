@@ -11,7 +11,7 @@ services:
             - .env
         environment:
             - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
-            - ALLOWED_ORIGINS=http://localhost:3000
+            - ALLOWED_ORIGINS=${ALLOWED_ORIGIN}
             - NODE_ENV=production
             - RAG_MCP_URL=http://rag-mcp:8002/sse
             - DOCDB_SUMMARIZATION_MCP_URL=http://summarization-mcp:8003/sse

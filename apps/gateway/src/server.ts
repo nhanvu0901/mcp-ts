@@ -44,6 +44,7 @@ const config = {
         process.env.MONGODB_URI ||
         "mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin",
     DEFAULT_COLLECTION_NAME: process.env.DEFAULT_COLLECTION_NAME || "RAG",
+    origin: process.env.ALLOWED_ORIGIN?.split(",") ?? "*",
 };
 
 
@@ -254,13 +255,7 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
     try {
         await server.register(import("@fastify/compress"), { global: false });
 
-        await server.register(cors, {
-            origin:
-                config.NODE_ENV === "production"
-                    ? process.env.ALLOWED_ORIGINS?.split(",") || false
-                    : true,
-            credentials: true,
-        });
+        await server.register(cors, { origin: config.origin });
 
         await server.register(helmet, {
             contentSecurityPolicy: {
@@ -401,9 +396,9 @@ declare module "fastify" {
         agent: any;
     }
 }
-if(config.NODE_ENV === "development") {
-    if (require.main === module) {
-        startServer();
-    }
-}
+
+
+startServer();
+
+
 export default buildServer;
