@@ -83,4 +83,4 @@ async def summarize_by_word_count(
 
 if __name__ == "__main__":
     print("DocDB Summarizer MCP server is running on port 8003...")
-    mcp.run(transport="sse")
+    mcp.run(transport="streamable-http")

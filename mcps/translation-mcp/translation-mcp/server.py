@@ -5,8 +5,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from services.translation import DocumentTranslator
 from services.utils import get_llm_client
 
-from services.translation import DocumentTranslator
-
 load_dotenv()
 
 mongo_uri = os.getenv("MONGODB_URI")
@@ -76,4 +74,4 @@ async def translate_text(
 
 if __name__ == "__main__":
     print("Translation MCP server is running on port 8004...")
-    mcp.run(transport="sse")
+    mcp.run(transport="streamable-http")

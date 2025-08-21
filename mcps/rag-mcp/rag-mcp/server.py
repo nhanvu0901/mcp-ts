@@ -274,5 +274,5 @@ if __name__ == "__main__":
     logger.info(f"Embedding model via LiteLLM: {config.LLM_EMBEDDING_MODEL}")
     logger.info(f"Query expansion: {'ENABLED' if ENABLE_QUERY_EXPANSION else 'DISABLED'}")
     logger.info(f"LLM reranking: {'ENABLED' if ENABLE_LLM_RERANKING else 'DISABLED'}")
-    mcp.run(transport="sse")
+    mcp.run(transport="streamable-http")
     logger.info("RAG Service MCP server shut down.")

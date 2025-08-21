@@ -12,10 +12,10 @@ services:
         environment:
             - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
             - ALLOWED_ORIGINS=${ALLOWED_ORIGIN}
-            - NODE_ENV=production
-            - RAG_MCP_URL=http://rag-mcp:8002/sse
-            - DOCDB_SUMMARIZATION_MCP_URL=http://summarization-mcp:8003/sse
-            - DOCUMENT_TRANSLATION_MCP_URL=http://translation-mcp:8004/sse
+            - NODE_ENV=development
+            - RAG_MCP_URL=http://rag-mcp:8002
+            - DOCDB_SUMMARIZATION_MCP_URL=http://summarization-mcp:8003
+            - DOCUMENT_TRANSLATION_MCP_URL=http://translation-mcp:8004
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
             - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}

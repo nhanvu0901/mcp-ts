@@ -26,19 +26,16 @@ const config = {
     NODE_ENV: process.env.NODE_ENV || "development",
     DEBUG: process.env.DEBUG,
 
-    // LiteLLM Proxy Configuration
     LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL),
     LITELLM_MASTER_KEY: cleanEnvVar(process.env.LITELLM_MASTER_KEY),
     LITELLM_APP_KEY: cleanEnvVar(process.env.LITELLM_APP_KEY),
 
     LLM_CHAT_MODEL: cleanEnvVar(process.env.LLM_CHAT_MODEL),
 
-    // MCP Service URLs
-    RAG_MCP_URL: process.env.RAG_MCP_URL || "http://localhost:8002/sse",
-    DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || "http://localhost:8003/sse",
-    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || "http://localhost:8004/sse",
+    RAG_MCP_URL: process.env.RAG_MCP_URL || "http://localhost:8002",
+    DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || "http://localhost:8003",
+    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || "http://localhost:8004",
 
-    // Application Settings
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || "10485760"),
     MONGODB_URI:
         process.env.MONGODB_URI ||
@@ -119,8 +116,9 @@ async function setupDebugHooks(server: FastifyInstance): Promise<void> {
             request.log.warn(
                 {
                     requestId: request.id,
+                    error: String(error)
                 },
-                "Failed to log response body " + error
+                "Failed to log response body"
             );
         }
         return payload;
@@ -203,15 +201,12 @@ async function setupMCPClient(): Promise<MultiServerMCPClient> {
     const client = new MultiServerMCPClient({
         RAGService: {
             url: config.RAG_MCP_URL,
-            transport: "sse",
         },
         DocDBSummarizationService: {
             url: config.DOCDB_SUMMARIZATION_MCP_URL,
-            transport: "sse",
         },
         DocumentTranslationService: {
             url: config.DOCUMENT_TRANSLATION_MCP_URL,
-            transport: "sse",
         },
     });
     return client;
@@ -309,7 +304,7 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
         await server.register(errorHandlerPlugin);
         await server.register(aiServicesPlugin);
     } catch (error) {
-        server.log.error("Error registering plugins:", error);
+        server.log.error({ error }, "Error registering plugins");
         throw error;
     }
 }
@@ -318,7 +313,7 @@ async function registerRoutes(server: FastifyInstance): Promise<void> {
     try {
         await server.register(api);
     } catch (error) {
-        server.log.error("Error registering routes", error);
+        server.log.error({ error }, "Error registering routes");
         throw error;
     }
 }
@@ -343,12 +338,12 @@ async function buildServer(): Promise<FastifyInstance> {
     await setupDebugHooks(server);
 
     const gracefulShutdown = async (signal: string) => {
-        server.log.info(`Received ${signal}, shutting down gracefully...`);
+        server.log.info({ signal }, "Received signal, shutting down gracefully");
         try {
             await server.close();
             process.exit(0);
         } catch (error) {
-            server.log.error("Error during shutdown:", error);
+            server.log.error({ error }, "Error during shutdown");
             process.exit(1);
         }
     };
@@ -358,11 +353,11 @@ async function buildServer(): Promise<FastifyInstance> {
     }
 
     process.on("unhandledRejection", (reason, promise) => {
-        server.log.error("Unhandled Rejection at:", promise, "reason:", reason);
+        server.log.error({ reason, promise }, "Unhandled Rejection");
     });
 
     process.on("uncaughtException", (error) => {
-        server.log.error("Uncaught Exception:", error);
+        server.log.error({ error }, "Uncaught Exception");
         process.exit(1);
     });
 
