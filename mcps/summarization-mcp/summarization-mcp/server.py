@@ -82,5 +82,5 @@ async def summarize_by_word_count(
         return f"Error: {str(e)}"
 
 if __name__ == "__main__":
-    print("DocDB Summarizer MCP server is running on port 8003...")
+    print("DocDB Summarizer MCP server streamable-http is running on port 8003...")
     mcp.run(transport="streamable-http")

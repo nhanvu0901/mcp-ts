@@ -73,5 +73,5 @@ async def translate_text(
         return f"Error: {str(e)}"
 
 if __name__ == "__main__":
-    print("Translation MCP server is running on port 8004...")
+    print("Translation MCP server streamable-http is running on port 8004...")
     mcp.run(transport="streamable-http")

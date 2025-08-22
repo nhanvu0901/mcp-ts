@@ -14,12 +14,11 @@ RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Kopírovanie zdrojového kódu
-COPY mcps/summarization-mcp/summarization-mcp/ .
+COPY mcps/azure-foundry-mcp/azure-foundry-mcp/ .
 
 # Nastavenie premenných prostredia (voliteľné)
 ENV PYTHONUNBUFFERED=1
-ENV QDRANT_HOST=localhost
 
-EXPOSE 8003
+EXPOSE 8005
 
 CMD ["python", "server.py"]

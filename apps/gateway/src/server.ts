@@ -32,9 +32,9 @@ const config = {
 
     LLM_CHAT_MODEL: cleanEnvVar(process.env.LLM_CHAT_MODEL),
 
-    RAG_MCP_URL: process.env.RAG_MCP_URL || "http://localhost:8002",
-    DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || "http://localhost:8003",
-    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || "http://localhost:8004",
+    RAG_MCP_URL: process.env.RAG_MCP_URL || "http://localhost:8002/mcp",
+    DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || "http://localhost:8003/mcp",
+    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || "http://localhost:8004/mcp",
 
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || "10485760"),
     MONGODB_URI:
@@ -264,42 +264,42 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
             }
         });
 
-        if (config.NODE_ENV !== "production") {
-            await server.register(swagger, {
-                openapi: {
-                    openapi: "3.0.0",
-                    info: {
-                        title: "Fastify MCP",
-                        description:
-                            "TypeScript/Fastify application with LangGraph, MCP integration, and LiteLLM proxy",
-                        version: "1.0.0",
-                    },
-                    servers: [
-                        {
-                            url: `http://localhost:${config.PORT}`,
-                            description: "Development server",
-                        },
-                    ],
-                    components: {
-                        securitySchemes: {
-                            bearerAuth: {
-                                type: "http",
-                                scheme: "bearer",
-                            },
-                        },
-                    },
-                },
-            });
 
-            await server.register(swaggerUi, {
-                routePrefix: "/docs",
-                uiConfig: {
-                    docExpansion: "full",
-                    deepLinking: false,
+        await server.register(swagger, {
+            openapi: {
+                openapi: "3.0.0",
+                info: {
+                    title: "Fastify MCP",
+                    description:
+                        "TypeScript/Fastify application with LangGraph, MCP integration, and LiteLLM proxy",
+                    version: "1.0.0",
                 },
-                staticCSP: true,
-            });
-        }
+                servers: [
+                    {
+                        url: `http://localhost:${config.PORT}`,
+                        description: "Development server",
+                    },
+                ],
+                components: {
+                    securitySchemes: {
+                        bearerAuth: {
+                            type: "http",
+                            scheme: "bearer",
+                        },
+                    },
+                },
+            },
+        });
+
+        await server.register(swaggerUi, {
+            routePrefix: "/docs",
+            uiConfig: {
+                docExpansion: "full",
+                deepLinking: false,
+            },
+            staticCSP: true,
+        });
+
 
         await server.register(errorHandlerPlugin);
         await server.register(aiServicesPlugin);
@@ -372,11 +372,7 @@ async function startServer() {
             host: config.HOST,
             port: config.PORT,
         });
-
-        if (config.NODE_ENV !== "production") {
-            console.log(`API Documentation: http://${config.HOST}:${config.PORT}/docs`);
-        }
-
+        console.log(`API Documentation: http://${config.HOST}:${config.PORT}/docs`);
     } catch (error) {
         console.error("Error starting server:", error);
         process.exit(1);
