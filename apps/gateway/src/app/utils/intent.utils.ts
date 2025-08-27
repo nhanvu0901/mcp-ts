@@ -147,7 +147,7 @@ export class IntentUtils {
         userId: string,
         collectionId?: string | string[],
         docId?: string,
-        fallbackQuery?: string
+        query?: string
     ): Promise<{ response: string; ragResponse: string | null }> {
         switch (intent.intent) {
             case "summarise":
@@ -162,7 +162,7 @@ export class IntentUtils {
                     intent,
                     userId,
                     collectionId,
-                    fallbackQuery
+                    query
                 );
 
             default:

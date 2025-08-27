@@ -21,8 +21,8 @@ export class AskAgentController {
                 session_id: providedSessionId,
             } = request.body;
 
-            if (!query && !intent) {
-                throw new Error("Either query or intent parameter is required");
+            if (!query || !query.trim()) {
+                throw new Error("Query is required and cannot be empty");
             }
 
             if (!userId) {
@@ -116,6 +116,39 @@ export class AskAgentController {
         }
     }
 
+    private static async setupChatHistory(
+        mongoClient: any,
+        model: any,
+        userId: string,
+        sessionId: string,
+        collectionId?: string | string[],
+        docId?: string
+    ): Promise<{
+        chatHistoryService: ChatHistoryService;
+        chatHistory: any;
+        collectionIds: string[];
+    }> {
+        const chatHistoryService = new ChatHistoryService(mongoClient, model);
+
+        const collectionIds: string[] = collectionId
+            ? Array.isArray(collectionId)
+                ? collectionId
+                : [collectionId]
+            : [];
+
+        const chatHistory = await chatHistoryService.getChatHistory(userId, sessionId, {
+            user_id: userId,
+            collection_id: collectionIds,
+            doc_id: docId,
+        });
+
+        return {
+            chatHistoryService,
+            chatHistory,
+            collectionIds,
+        };
+    }
+
     private static async processIntentRequest(
         request: FastifyRequest,
         intent: IntentRequest,
@@ -154,18 +187,14 @@ export class AskAgentController {
                 fallbackQuery
             );
             if (sessionId) {
-                const chatHistoryService = new ChatHistoryService(mongoClient, model);
-                const collectionIds: string[] = collectionId
-                    ? Array.isArray(collectionId)
-                        ? collectionId
-                        : [collectionId]
-                    : [];
-
-                const chatHistory = await chatHistoryService.getChatHistory(userId, sessionId, {
-                    user_id: userId,
-                    collection_id: collectionIds,
-                    doc_id: docId,
-                });
+                const { chatHistoryService, chatHistory } = await AskAgentController.setupChatHistory(
+                    mongoClient,
+                    model,
+                    userId,
+                    sessionId,
+                    collectionId,
+                    docId
+                );
 
                 const intentQuery =
                     `Intent: ${intent.intent}` +
@@ -182,6 +211,7 @@ export class AskAgentController {
                     docId
                 );
             }
+
             return {
                 aiResponse: result.response,
                 ragResponse: result.ragResponse,
@@ -258,19 +288,14 @@ export class AskAgentController {
 
             const finalSessionId = sessionId || AgentUtils.generateSessionId(userId, collectionId);
 
-            const chatHistoryService = new ChatHistoryService(mongoClient, model);
-
-            const collectionIds: string[] = collectionId
-                ? Array.isArray(collectionId)
-                    ? collectionId
-                    : [collectionId]
-                : [];
-
-            const chatHistory = await chatHistoryService.getChatHistory(userId, finalSessionId, {
-                user_id: userId,
-                collection_id: collectionIds,
-                doc_id: docId,
-            });
+            const { chatHistoryService, chatHistory, collectionIds } = await AskAgentController.setupChatHistory(
+                mongoClient,
+                model,
+                userId,
+                finalSessionId,
+                collectionId,
+                docId
+            );
 
             const allMessages = await chatHistory.getMessages();
             const contextMessages = await chatHistoryService.buildContextMessages(

@@ -38,8 +38,7 @@ export const AskAgentSchema = {
         properties: {
             query: {
                 type: "string",
-                description:
-                    "The query to search for in documents. Required when intent is not provided.",
+                description: "The query to search for in documents. Required for all requests.",
                 minLength: 1,
                 maxLength: 2000,
             },

@@ -62,27 +62,6 @@ After installing `just`, install NX CLI, Node.js, and Python dependencies:
 just install
 ```
 
-## Platform-Specific Setup Notes
-
-### **Windows Users**
-- **PowerShell**: Use PowerShell or Command Prompt for running commands
-- **WSL2**: For better Docker performance, consider using WSL2 with Docker Desktop
-- **Path Separators**: The project handles path differences automatically
-- **Line Endings**: Ensure Git is configured to handle line endings properly:
-  ```bash
-  git config --global core.autocrlf true
-  ```
-
-### **macOS Users**
-- **Docker Desktop**: Ensure Docker Desktop for Mac is installed and running
-- **Homebrew**: Most dependencies can be installed via Homebrew
-
-### **Linux Users**
-- **Docker**: Install Docker Engine and Docker Compose
-- **Permissions**: You may need to add your user to the docker group:
-  ```bash
-  sudo usermod -aG docker $USER
-  ```
 
 ## Development Workflow
 
@@ -211,6 +190,7 @@ just compose-down
 - `NODE_ENV` - Node.js environment mode
 - `DEBUG` - Enable debug logging
 - `TFIDF_MODELS_DIR` - Directory path for TF-IDF model storage
+- `SWAGGER_HOST` - Host URL for Swagger documentation in production environments
 
 ### AI Features Configuration
 - `ENABLE_QUERY_EXPANSION` - Enable automatic query expansion for better search results
