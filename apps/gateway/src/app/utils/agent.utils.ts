@@ -49,6 +49,7 @@ export class AgentUtils {
         const timestamp = Date.now();
         const randomSuffix = Math.random().toString(36).substring(2, 8);
 
+        let sessionData: string;
         if (
             collectionId &&
             (Array.isArray(collectionId) ? collectionId.length > 0 : collectionId)
@@ -57,10 +58,15 @@ export class AgentUtils {
                 ? collectionId
                 : [collectionId];
             const sessionCollectionId = collectionIds.join(",");
-            return `${userId}_${sessionCollectionId}_${timestamp}_${randomSuffix}`;
+            sessionData = `${userId}_${sessionCollectionId}_${timestamp}_${randomSuffix}`;
+        } else {
+            sessionData = `${userId}_general_${timestamp}_${randomSuffix}`;
         }
 
-        return `${userId}_general_${timestamp}_${randomSuffix}`;
+        return Buffer.from(sessionData).toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, '');
     }
 
     static extractSourceReferences(

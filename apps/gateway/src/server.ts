@@ -32,9 +32,11 @@ const config = {
 
     LLM_CHAT_MODEL: cleanEnvVar(process.env.LLM_CHAT_MODEL),
 
-    RAG_MCP_URL: process.env.RAG_MCP_URL || "http://localhost:8002/mcp",
-    DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL || "http://localhost:8003/mcp",
-    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL || "http://localhost:8004/mcp",
+    RAG_MCP_URL: process.env.RAG_MCP_URL as string,
+    DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL as string,
+    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL  as string,
+
+    SWAGGER_HOST: process.env.SWAGGER_HOST,
 
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || "10485760"),
     MONGODB_URI:
@@ -245,7 +247,23 @@ const aiServicesPlugin = fp(
         dependencies: [],
     }
 );
+function buildServersArray(): Array<{ url: string; description: string }> {
+    const servers = [
+        {
+            url: `http://localhost:${config.PORT}`,
+            description: "Development server",
+        },
+    ];
 
+    if (config.SWAGGER_HOST) {
+        servers.push({
+            url: `https://${config.SWAGGER_HOST}`,
+            description: "Environment server",
+        });
+    }
+
+    return servers;
+}
 async function registerPlugins(server: FastifyInstance): Promise<void> {
     try {
         await server.register(import("@fastify/compress"), { global: false });
@@ -274,12 +292,7 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
                         "TypeScript/Fastify application with LangGraph, MCP integration, and LiteLLM proxy",
                     version: "1.0.0",
                 },
-                servers: [
-                    {
-                        url: `http://localhost:${config.PORT}`,
-                        description: "Development server",
-                    },
-                ],
+                servers: buildServersArray(),
                 components: {
                     securitySchemes: {
                         bearerAuth: {

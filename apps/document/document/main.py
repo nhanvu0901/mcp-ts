@@ -276,7 +276,7 @@ async def upload_document(
     file: UploadFile = File(...),
     user_id: str = Form(...),
     collection_id: Optional[str] = Form(None),
-    embed: bool = Form(False)
+    embed: bool = Form(True)
 ):
     document_id = str(uuid.uuid4())
     temp_file_path = None
