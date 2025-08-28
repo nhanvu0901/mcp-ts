@@ -28,7 +28,8 @@ mcp = FastMCP(
 async def translate_document(
     user_id: str,
     document_id: str,
-    target_lang: str
+    target_lang: str,
+    additional_instructions: str = None
 ) -> str:
     """
     Translate document to target language.
@@ -37,6 +38,7 @@ async def translate_document(
         user_id: User ID for document access
         document_id: Document ID to translate
         target_lang: Target language for translation
+        additional_instructions: Additional instructions for customizing the translation
 
     Returns:
         Translated document text with word count
@@ -45,7 +47,8 @@ async def translate_document(
         translated_text, word_count = await translator.translate_document(
             user_id=user_id,
             document_id=document_id,
-            target_lang=target_lang
+            target_lang=target_lang,
+            additional_instructions=additional_instructions
         )
         return f"Translation ({word_count} words):\n\n{translated_text}"
     except Exception as e:

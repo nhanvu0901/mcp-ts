@@ -63,8 +63,9 @@ Thumbs.db
 test-output
 
 .env
+.env*
 
 src/python/data/uploads/
 src/python/data/tfidf_models
 .git
-venv
+.venv

@@ -6,7 +6,8 @@ export class IntentUtils {
         mcpClient: MultiServerMCPClient,
         intent: IntentRequest,
         userId: string,
-        docId?: string
+        docId: string,
+        query: string
     ): Promise<{ response: string; ragResponse: string | null }> {
         if (!docId) {
             throw new Error("Document ID is required for summarization");
@@ -15,6 +16,12 @@ export class IntentUtils {
         try {
             const tools = await mcpClient.getTools("DocDBSummarizationService");
             let result: string;
+
+            const summaryParams = {
+                user_id: userId,
+                document_id: docId,
+                additional_instructions: query
+            };
 
             if (intent.word_count) {
                 const wordCountTool = tools.find((tool) =>
@@ -25,9 +32,8 @@ export class IntentUtils {
                 }
 
                 result = await wordCountTool.invoke({
-                    user_id: userId,
-                    document_id: docId,
-                    num_words: intent.word_count,
+                    ...summaryParams,
+                    num_words: intent.word_count
                 });
             } else {
                 const levelTool = tools.find((tool) =>
@@ -39,9 +45,8 @@ export class IntentUtils {
 
                 const level = intent.level || "medium";
                 result = await levelTool.invoke({
-                    user_id: userId,
-                    document_id: docId,
-                    summarization_level: level,
+                    ...summaryParams,
+                    summarization_level: level
                 });
             }
 
@@ -60,7 +65,8 @@ export class IntentUtils {
         mcpClient: MultiServerMCPClient,
         intent: IntentRequest,
         userId: string,
-        docId?: string
+        docId: string,
+        query: string
     ): Promise<{ response: string; ragResponse: string | null }> {
         if (!intent.target_language) {
             throw new Error("Target language is required for translation");
@@ -82,6 +88,7 @@ export class IntentUtils {
                 user_id: userId,
                 document_id: docId,
                 target_lang: intent.target_language,
+                additional_instructions: query
             });
 
             return {
@@ -99,8 +106,8 @@ export class IntentUtils {
         mcpClient: MultiServerMCPClient,
         intent: IntentRequest,
         userId: string,
-        collectionId?: string | string[],
-        query = "search documents"
+        collectionId: string | string[],
+        query: string
     ): Promise<{ response: string; ragResponse: string | null }> {
         if (!collectionId || (Array.isArray(collectionId) && collectionId.length === 0)) {
             throw new Error("Collection ID is required for search intent");
@@ -145,23 +152,23 @@ export class IntentUtils {
         mcpClient: MultiServerMCPClient,
         intent: IntentRequest,
         userId: string,
+        query: string,
         collectionId?: string | string[],
-        docId?: string,
-        query?: string
+        docId?: string
     ): Promise<{ response: string; ragResponse: string | null }> {
         switch (intent.intent) {
             case "summarise":
-                return await this.processSummarizeIntent(mcpClient, intent, userId, docId);
+                return await this.processSummarizeIntent(mcpClient, intent, userId, docId!, query);
 
             case "translate":
-                return await this.processTranslateIntent(mcpClient, intent, userId, docId);
+                return await this.processTranslateIntent(mcpClient, intent, userId, docId!, query);
 
             case "search":
                 return await this.processSearchIntent(
                     mcpClient,
                     intent,
                     userId,
-                    collectionId,
+                    collectionId!,
                     query
                 );
 

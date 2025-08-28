@@ -39,9 +39,9 @@ export class AskAgentController {
                     request,
                     intent,
                     userId,
+                    query,
                     collectionId,
                     docId,
-                    query,
                     sessionId
                 );
 
@@ -153,9 +153,9 @@ export class AskAgentController {
         request: FastifyRequest,
         intent: IntentRequest,
         userId: string,
+        query: string,
         collectionId?: string | string[],
         docId?: string,
-        fallbackQuery?: string,
         sessionId?: string
     ): Promise<{ aiResponse: string; ragResponse: string | null }> {
         try {
@@ -182,9 +182,9 @@ export class AskAgentController {
                 mcpClient,
                 intent,
                 userId,
+                query,
                 collectionId,
-                docId,
-                fallbackQuery
+                docId
             );
             if (sessionId) {
                 const { chatHistoryService, chatHistory } = await AskAgentController.setupChatHistory(

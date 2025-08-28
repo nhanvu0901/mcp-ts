@@ -1,20 +1,20 @@
 import asyncio
 import json
-from enum import Enum
-from typing import Literal, Optional, Tuple
-import os
 import regex as re
-import semchunk
-import tiktoken
+from typing import Optional, Tuple, Literal
+from enum import Enum
+
+from langchain_core.messages import SystemMessage, HumanMessage
 from lingua import Language, LanguageDetectorBuilder
 from motor.motor_asyncio import AsyncIOMotorClient
-from langchain_core.messages import HumanMessage, SystemMessage
-from .utils import get_llm_client
+import tiktoken
+import semchunk
+import os
+from services.utils import get_llm_client
 
-detector = LanguageDetectorBuilder.from_all_languages().with_preloaded_language_models().build()
-LLM_RERANKER_MODEL: str = os.getenv("LLM_RERANKER_MODEL")
-encoding = tiktoken.encoding_for_model(LLM_RERANKER_MODEL)
-
+LLM_SUMERIZATION_MODEL: str = os.getenv("LLM_SUMERIZATION_MODEL")
+encoding = tiktoken.encoding_for_model(LLM_SUMERIZATION_MODEL)
+detector = LanguageDetectorBuilder.from_languages(Language.ENGLISH, Language.CZECH, Language.SLOVAK).build()
 
 class SummarizationLevel(Enum):
     CONCISE = "concise"
@@ -89,7 +89,7 @@ def detect_language(text: str) -> SupportedLanguage:
         return "English"
 
 def get_chunker(max_token_chars: int = 1024):
-    return semchunk.chunkerify("gpt-4o", max_token_chars)
+    return semchunk.chunkerify(LLM_SUMERIZATION_MODEL, max_token_chars)
 
 def chunk_text(text: str, max_token_chars: int = 1024):
     chunker = get_chunker(max_token_chars)
@@ -144,8 +144,7 @@ class DocumentSummarizer:
         response = await self.llm_client.ainvoke(langchain_messages)
         return json.loads(response.content)
 
-    async def _summarize_chunk(self, chunk: str, bullet_num: int, lang: Optional[SupportedLanguage]) -> Tuple[
-        str, list]:
+    async def _summarize_chunk(self, chunk: str, bullet_num: int, lang: Optional[SupportedLanguage]) -> Tuple[str, list]:
         system_prompt = CHUNK_SYS_PROMPT
         if lang:
             system_prompt += SYS_PROMPT_ADD.format(lang=lang)
@@ -241,7 +240,8 @@ class DocumentSummarizer:
         self,
         user_id: str,
         document_id: str,
-        num_words: int = 100
+        num_words: int = 100,
+        further_instruction: Optional[str] = None
     ) -> Tuple[str, int]:
         if num_words <= 50:
             level = "concise"
@@ -251,5 +251,7 @@ class DocumentSummarizer:
             level = "detailed"
 
         instruction = f"Create a summary with approximately {num_words} words."
+        if further_instruction:
+            instruction = f"{instruction} {further_instruction}"
 
         return await self.summarize_document(user_id, document_id, level, instruction)

@@ -29,7 +29,7 @@ async def summarize_by_detail_level(
     user_id: str,
     document_id: str,
     summarization_level: str = "medium",
-    further_instruction: str = None
+    additional_instructions: str = None
 ) -> str:
     """
     Summarize document with detail level control.
@@ -38,7 +38,7 @@ async def summarize_by_detail_level(
         user_id: User ID for document access
         document_id: Document ID to summarize
         summarization_level: Detail level (concise, medium, detailed)
-        further_instruction: Additional instructions
+        additional_instructions: Additional instructions for customizing the summary
 
     Returns:
         Document summary with word count
@@ -48,7 +48,7 @@ async def summarize_by_detail_level(
             user_id=user_id,
             document_id=document_id,
             level=summarization_level,
-            further_instruction=further_instruction
+            further_instruction=additional_instructions
         )
         return f"Summary ({word_count} words):\n\n{summary}"
     except Exception as e:
@@ -58,7 +58,8 @@ async def summarize_by_detail_level(
 async def summarize_by_word_count(
     user_id: str,
     document_id: str,
-    num_words: int = 100
+    num_words: int = 100,
+    additional_instructions: str = None
 ) -> str:
     """
     Summarize document to target word count.
@@ -67,6 +68,7 @@ async def summarize_by_word_count(
         user_id: User ID for document access
         document_id: Document ID to summarize
         num_words: Target word count
+        additional_instructions: Additional instructions for customizing the summary
 
     Returns:
         Document summary with actual word count
@@ -75,7 +77,8 @@ async def summarize_by_word_count(
         summary, actual_word_count = await summarizer.summarize_document_with_word_count(
             user_id=user_id,
             document_id=document_id,
-            num_words=num_words
+            num_words=num_words,
+            further_instruction=additional_instructions
         )
         return f"Summary (Target: {num_words} words, Actual: {actual_word_count} words):\n\n{summary}"
     except Exception as e:

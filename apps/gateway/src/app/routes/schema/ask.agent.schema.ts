@@ -7,26 +7,37 @@ export const AskAgentSchema = {
         "1. Query-based Mode (Traditional):\n" +
         "Submit natural language queries to the AI agent for intelligent document analysis, Q&A, and contextual responses. The agent will interpret your query and use appropriate tools to search, analyze, and respond based on your document collection.\n\n" +
         "2. Intent-based Mode (Direct Actions):\n" +
-        "Execute specific, deterministic actions without AI decision to choose tools.\n\n" +
+        "Execute specific, deterministic actions without AI decision-making overhead. Direct tool invocation for predictable results.\n\n" +
         "Available Intent Types:\n\n" +
-        "• summarise - Generate document summaries with control over detail level or target word count\n" +
-        "  - Requires: doc_id (specific document to summarize)\n" +
-        "  - Options: level ('concise', 'medium', 'detailed') OR word_count (10-2000 words)\n\n" +
-        "• translate - Translate documents to target languages\n" +
-        "  - Requires: doc_id (document to translate), target_language (e.g., 'en', 'de', 'fr', 'es')\n\n" +
-        "• search - Search across document collections with result limiting\n" +
-        "  - Optional: limit (1-20 results), can work with or without query parameter\n\n" +
-        "Request Priority:\n" +
-        "When both 'query' and 'intent' are provided, intent takes precedence and the request will be processed as an intent-based action.\n\n" +
+        "• summarise - Generate document summaries with precision control\n" +
+        "  - Requires: doc_id (target document)\n" +
+        "  - Options: level ('concise', 'medium', 'detailed') OR word_count (10-2000)\n" +
+        "  - Tools: DocDBSummarizationService (summarize_by_word_count, summarize_by_detail_level)\n\n" +
+        "• translate - Document translation with language targeting\n" +
+        "  - Requires: doc_id (source document), target_language (ISO language code)\n" +
+        "  - Tools: DocumentTranslationService (translate_document)\n\n" +
+        "• search - Retrieve relevant documents from collections\n" +
+        "  - Requires: collection_id (single string or array)\n" +
+        "  - Options: limit (1-20 results, default: 5)\n" +
+        "  - Tools: RAGService (retrieve)\n" +
+        "  - Returns: Ranked document excerpts with relevance scoring\n\n" +
+        "Processing Priority:\n" +
+        "Intent-based requests bypass AI agent processing and directly invoke MCP tools for faster, more predictable responses.\n\n" +
+        "Validation Rules:\n" +
+        "- summarise: Requires doc_id, validates level enum or word_count range\n" +
+        "- translate: Requires doc_id and target_language\n" +
+        "- search: Requires non-empty collection_id, validates limit range\n\n" +
+        "Error Handling:\n" +
+        "Intent processing failures include specific error context (tool not found, parameter validation, service errors) for debugging.\n\n" +
         "Collection Support:\n" +
-        "Both modes support single collections (string) or multi-collection search (array of collection IDs).\n\n" +
+        "Both modes support single collections (string) or multi-collection operations (array of collection IDs).\n\n" +
         "Use Cases:\n" +
         "- Traditional: 'What are the key findings in our Q4 report?'\n" +
-        '- Intent-based: {"intent": "summarise", "level": "medium"}\n\n' +
+        '- Intent-based: {"intent": "summarise", "level": "medium", "doc_id": "report_123"}\n\n' +
         "Session Management:\n" +
-        "- session_id is optional; if not provided, one will be auto-generated\n" +
-        "- session_id is always returned in the response\n" +
-        "- collection_id is optional; some intents may require it",
+        "- session_id is optional; auto-generated using user_id and collection_id if not provided\n" +
+        "- session_id is always returned in response for conversation continuity\n" +
+        "- Required parameters vary by intent type",
     security: [
         {
             bearerAuth: [],
@@ -38,17 +49,17 @@ export const AskAgentSchema = {
         properties: {
             query: {
                 type: "string",
-                description: "The query to search for in documents. Required for all requests.",
+                description: "Natural language query for document analysis. Required for query-based mode, optional for intent-based mode.",
                 minLength: 1,
                 maxLength: 2000,
             },
             user_id: {
                 type: "string",
-                description: "User identifier",
+                description: "User identifier for authentication and access control",
             },
             session_id: {
                 type: "string",
-                description: "Optional session identifier. Auto-generated if not provided.",
+                description: "Optional session identifier for conversation continuity. Auto-generated if not provided.",
             },
             collection_id: {
                 anyOf: [
@@ -59,11 +70,11 @@ export const AskAgentSchema = {
             },
             doc_id: {
                 type: "string",
-                description: "Optional document ID. Required for summarise and translate intents.",
+                description: "Specific document identifier. Required for summarise and translate intents.",
             },
             intent: {
                 type: "object",
-                description: "Optional intent object for direct action routing.",
+                description: "Intent object for direct MCP tool invocation.",
                 properties: {
                     intent: {
                         type: "string",
@@ -83,13 +94,13 @@ export const AskAgentSchema = {
                     },
                     target_language: {
                         type: "string",
-                        description: "Target language for translation (translate intent only)",
+                        description: "Target language code for translation (translate intent only)",
                     },
                     limit: {
                         type: "number",
                         minimum: 1,
                         maximum: 20,
-                        description: "Maximum search results (search intent only)",
+                        description: "Maximum search results (search intent only, default: 5)",
                     },
                 },
                 required: ["intent"],

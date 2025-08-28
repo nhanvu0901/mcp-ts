@@ -104,7 +104,7 @@ services:
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
             - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
-            - LLM_RERANKER_MODEL=${LLM_RERANKER_MODEL}
+            - LLM_SUMERIZATION_MODEL=${LLM_SUMERIZATION_MODEL}
         depends_on:
             - mongodb
             - qdrant
@@ -127,8 +127,7 @@ services:
             - QDRANT_PORT=${QDRANT_PORT}
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
-            - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
-            - LLM_RERANKER_MODEL=${LLM_RERANKER_MODEL}
+            - LLM_TRANSLATION_MODEL=${LLM_TRANSLATION_MODEL}
         depends_on:
             - mongodb
             - qdrant

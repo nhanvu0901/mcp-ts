@@ -5,10 +5,11 @@ import semchunk
 from motor.motor_asyncio import AsyncIOMotorClient
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-
+import os
+LLM_TRANSLATION_MODEL: str = os.getenv("LLM_TRANSLATION_MODEL")
 
 def get_chunker(max_token_chars: int = 1024):
-    return semchunk.chunkerify("gpt-4o", max_token_chars)
+    return semchunk.chunkerify(LLM_TRANSLATION_MODEL, max_token_chars)
 
 
 def chunk_text(text: str, max_token_chars: int = 1024):
@@ -35,6 +36,8 @@ Requirements:
 - Preserve the original meaning and tone
 - Do not add any additional keys or fields
 
+Additional instructions: {additional_instructions}
+
 Text to translate: {chunk}
 
 JSON response:"""
@@ -52,8 +55,12 @@ JSON response:"""
             print(f"Database error: {e}")
             return None
 
-    async def _translate_chunk(self, chunk: str, target_lang: str) -> str:
-        user_message = self.translate_prompt.format(chunk=chunk, target_lang=target_lang)
+    async def _translate_chunk(self, chunk: str, target_lang: str, additional_instructions: str = "") -> str:
+        user_message = self.translate_prompt.format(
+            chunk=chunk,
+            target_lang=target_lang,
+            additional_instructions=additional_instructions
+        )
 
         messages = [
             SystemMessage(content=self.sys_prompt),
@@ -75,17 +82,23 @@ JSON response:"""
             print(f"Translation failed for chunk: {e}")
             return chunk
 
-    async def translate_text(self, text: str, target_lang: str) -> str:
+    async def translate_text(self, text: str, target_lang: str, additional_instructions: str = "") -> str:
         try:
             chunks = chunk_text(text, 1024)
-            tasks = [self._translate_chunk(chunk, target_lang) for chunk in chunks]
+            tasks = [self._translate_chunk(chunk, target_lang, additional_instructions) for chunk in chunks]
             translated_chunks = await asyncio.gather(*tasks)
             return " ".join(translated_chunks)
         except Exception as e:
             print(f"Text translation failed: {e}")
             return text
 
-    async def translate_document(self, user_id: str, document_id: str, target_lang: str) -> Tuple[str, int]:
+    async def translate_document(
+        self,
+        user_id: str,
+        document_id: str,
+        target_lang: str,
+        additional_instructions: Optional[str] = None
+    ) -> Tuple[str, int]:
         document = await self._get_document(user_id, document_id)
         if not document:
             raise ValueError(f"Document not found for user {user_id} and document {document_id}")
@@ -94,7 +107,8 @@ JSON response:"""
         if not text:
             raise ValueError("Document has no text content")
 
-        translated_text = await self.translate_text(text, target_lang)
+        instructions = additional_instructions or ""
+        translated_text = await self.translate_text(text, target_lang, instructions)
         word_count = len(translated_text.split())
 
         return translated_text, word_count
