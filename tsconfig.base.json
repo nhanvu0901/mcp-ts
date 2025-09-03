@@ -17,6 +17,10 @@
         "skipLibCheck": true,
         "strict": true,
         "allowSyntheticDefaultImports": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "baseUrl": ".",
+        "paths": {
+            "@ai-gateway/auth": ["libs/auth/src/index.ts"]
+        }
     }
 }

@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from qdrant_client import QdrantClient
 import logging
 from typing import List, Any
@@ -16,6 +16,7 @@ from utils import (
     LLMRerankerService,
     create_reranking_metadata
 )
+from fastmcp.server.auth.providers.jwt import JWTVerifier
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO,
@@ -32,11 +33,31 @@ DEFAULT_FUSION_METHOD = config.DEFAULT_FUSION_METHOD
 # TF-IDF Configuration
 TFIDF_MODELS_DIR = config.TFIDF_MODELS_DIR
 ENABLE_LLM_RERANKING = config.ENABLE_LLM_RERANKING
+
+# auth (https://gofastmcp.com/servers/auth/token-verification#jwks-endpoint-integration)
+public_key = config.PUBLIC_KEY
+issuer = config.ISSUER
+
+if public_key and public_key.startswith("-----BEGIN CERTIFICATE-----"):
+    verifier = JWTVerifier(
+        public_key=public_key,
+        issuer=issuer,
+    )
+elif public_key:
+    verifier = JWTVerifier(
+        jwks_uri=public_key,
+        issuer=issuer,
+    )
+else:
+    raise ValueError("PUBLIC_KEY environment variable is not set or invalid.")
+
+    
 # Initialize MCP Server
 mcp = FastMCP(
-    config.SERVICE_NAME,
+    name=config.SERVICE_NAME,
     host=config.SERVICE_HOST,
     port=config.SERVICE_PORT,
+    auth=verifier
 )
 
 # Initialize clients and services

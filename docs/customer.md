@@ -1,4 +1,27 @@
-# Customer Guide
+<a id="readme-top"></a>
+
+<div align="center">
+
+![Guide](https://img.shields.io/badge/Guide-Customer-red?style=for-the-badge&logo=book&logoColor=white)
+
+<br />
+<h3 align="center">Customer Guide</h3>
+
+<p align="center">
+API and usage documentation for end users of the AI Gateway platform.<br />
+<a href="https://git.asseco-ce.com/ai_dev/AI_HUB/ai-gateway"><strong>Repository »</strong></a>
+</p>
+</div>
+
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li><a href="#api-documentation">API Documentation</a></li>
+    <li><a href="#gateway-service-port-3000">Gateway Service</a></li>
+    <li><a href="#document-service-port-8000">Document Service</a></li>
+    <li><a href="#mcp-services-integration">MCP Services Integration</a></li>
+  </ol>
+</details>
 
 ## API Documentation
 
@@ -55,33 +78,47 @@ Process queries through AI agent with two distinct operational modes: query-base
 
 **Summarise Intent**
 
-- Requires: `doc_id`
-- Options: Either `level` OR `word_count` (not both)
-- Validation: Fails if doc_id missing
+- Requires: `doc_id` and `query` (additional instructions)
+- Options: Either `level` ('concise', 'medium', 'detailed') OR `word_count` (10-2000) - not both
+- MCP Service: DocDBSummarizationService
+- Tools: `summarize_by_detail_level`, `summarize_by_word_count`
+- Validation: Fails if doc_id missing; validates level enum or word_count range
 
 **Translate Intent**
 
-- Requires: `doc_id` and `target_language`
-- Validation: Fails if either missing
+- Requires: `doc_id`, `target_language` (ISO language code), and `query` (additional instructions)
+- MCP Service: DocumentTranslationService
+- Tools: `translate_document`
+- Validation: Fails if doc_id, target_language, or query missing
 
 **Search Intent**
 
-- Optional: `collection_id` (single or array)
-- Uses query parameter if provided for search terms
-- Searches within user document collections, not external sources
+- Requires: `collection_id` (single string or array) and `query` (search terms)
+- Optional: `limit` (1-20 results, default: 5)
+- MCP Service: RAGService
+- Tools: `retrieve`
+- Returns: Ranked document excerpts with relevance scoring
+- Validation: Fails if collection_id or query empty; validates limit range (minimum 1)
 
 #### Processing Flow
 
 ```
 Request received
     ↓
-Check if intent provided?
-    ├─ YES → Validate intent requirements
-    │         ├─ Valid → Process via IntentUtils
-    │         └─ Invalid → Return error 400
-    └─ NO → Check if query provided?
-             ├─ YES → Process via AI Agent
-             └─ NO → Return error 400
+Validate query is not empty (required for both modes)
+    ├─ Empty → Return error 400
+    └─ Valid → Check if intent provided?
+                ├─ YES → IntentUtils.validateIntent()
+                │         ├─ Valid → IntentUtils.processIntent()
+                │         │         ├─ summarise → DocDBSummarizationService
+                │         │         ├─ translate → DocumentTranslationService  
+                │         │         └─ search → RAGService
+                │         │         ↓
+                │         │         Direct MCP tool invocation (bypasses AI agent )
+                │         │         ↓
+                │         │         Return intent-based response
+                │         └─ Invalid → Return error 400
+                └─ NO → Process via AI Agent
 ```
 
 #### Response Structure
@@ -459,3 +496,28 @@ The gateway integrates with three MCP (Model Context Protocol) services:
 - URL: `http://localhost:8004/mcp`
 - Handles document translation
 - Supports multiple target languages
+
+---
+
+## Authentication & Authorization for MCP Services
+
+All MCP services require a **JWT token** in the `Authorization` header. The token is verified against the public key (`PUBLIC_KEY`) and issuer (`ISSUER`) set in the service configuration.
+
+**Example request to RAG MCP Service:**
+
+```http
+POST http://localhost:8002/mcp/retrieve
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+
+{
+  "query": "Find all documents about AI.",
+  "user_id": "user-123",
+  "collection_id": ["collection-1", "collection-2"],
+  "limit": 5
+}
+```
+
+If the token is invalid or missing, the response will be 401 Unauthorized.
+
+---

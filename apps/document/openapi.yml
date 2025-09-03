@@ -1,0 +1,527 @@
+openapi: 3.1.0
+info:
+  title: Document Service API
+  version: 1.0.0
+paths:
+  /documents/last-30-days:
+    get:
+      summary: Get Document References
+      description: |-
+        Get recent document metadata for a user.
+
+        Returns document metadata (not full content) for documents uploaded
+        in the last 30 days. Intended for syncing and recent activity displays.
+
+        Args:
+            user_id (str): User identifier to filter documents
+
+        Returns:
+            dict: Response containing:
+                - documents: List of document metadata objects
+                - total_count: Number of documents found
+                - sync_timestamp: ISO timestamp of when data was retrieved
+      operationId: get_document_references_documents_last_30_days_get
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /collections:
+    post:
+      summary: Create Collection
+      operationId: create_collection_collections_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: List Collections
+      operationId: list_collections_collections_get
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  '/collections/{collection_id}':
+    delete:
+      summary: Delete Collection
+      operationId: delete_collection_collections__collection_id__delete
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents:
+    post:
+      summary: Upload Document
+      operationId: upload_document_documents_post
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_document_documents_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: List Documents
+      operationId: list_documents_documents_get
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            title: User Id
+        - name: collection_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Collection Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/ocr:
+    post:
+      summary: Upload Document Ocr
+      description: |-
+        Upload and process document using OCR extraction.
+
+        Args:
+            file: The uploaded file
+            user_id: User identifier
+            collection_id: Optional collection identifier
+            embed: Whether to create embeddings
+            suggested_languages: Comma-separated OCR languages (e.g., "eng,vie")
+            use_llm: Whether to use LLM for text correction and formatting
+      operationId: upload_document_ocr_documents_ocr_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_document_ocr_documents_ocr_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  '/documents/{document_id}':
+    get:
+      summary: Get Document Info
+      operationId: get_document_info_documents__document_id__get
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Document Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Delete Document
+      operationId: delete_document_documents__document_id__delete
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Document Id
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/query:
+    post:
+      summary: Query Documents
+      description: >-
+        Advanced document query endpoint with flexible search options and
+        filtering
+      operationId: query_documents_documents_query_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentQuery'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/search:
+    post:
+      summary: Search Documents
+      operationId: search_documents_documents_search_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentSearch'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  '/documents/{document_id}/status':
+    get:
+      summary: Get Document Status
+      operationId: get_document_status_documents__document_id__status_get
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Document Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health Check
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    Body_upload_document_documents_post:
+      properties:
+        file:
+          type: string
+          format: binary
+          title: File
+        user_id:
+          type: string
+          title: User Id
+        collection_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Collection Id
+        embed:
+          type: boolean
+          title: Embed
+          default: true
+      type: object
+      required:
+        - file
+        - user_id
+      title: Body_upload_document_documents_post
+    Body_upload_document_ocr_documents_ocr_post:
+      properties:
+        file:
+          type: string
+          format: binary
+          title: File
+        user_id:
+          type: string
+          title: User Id
+        collection_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Collection Id
+        embed:
+          type: boolean
+          title: Embed
+          default: false
+        suggested_languages:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Suggested Languages
+          default: eng
+        use_llm:
+          type: boolean
+          title: Use Llm
+          default: true
+      type: object
+      required:
+        - file
+        - user_id
+      title: Body_upload_document_ocr_documents_ocr_post
+    CollectionCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        user_id:
+          type: string
+          title: User Id
+      type: object
+      required:
+        - name
+        - user_id
+      title: CollectionCreate
+    DocumentQuery:
+      properties:
+        query:
+          type: string
+          title: Query
+        user_id:
+          type: string
+          title: User Id
+        collection_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Collection Id
+        search_type:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Search Type
+          default: hybrid
+        dense_weight:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Dense Weight
+          default: 0.6
+        limit:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Limit
+          default: 10
+        filters:
+          anyOf:
+            - additionalProperties: true
+              type: object
+            - type: 'null'
+          title: Filters
+        include_metadata:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+          title: Include Metadata
+          default: true
+        include_text:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+          title: Include Text
+          default: true
+        min_score:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Min Score
+          default: 0
+      type: object
+      required:
+        - query
+        - user_id
+      title: DocumentQuery
+    DocumentSearch:
+      properties:
+        query:
+          type: string
+          title: Query
+        user_id:
+          type: string
+          title: User Id
+        collection_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Collection Id
+        search_type:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Search Type
+          default: hybrid
+        dense_weight:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Dense Weight
+          default: 0.6
+        limit:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Limit
+          default: 10
+      type: object
+      required:
+        - query
+        - user_id
+      title: DocumentSearch
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+        - loc
+        - msg
+        - type
+      title: ValidationError

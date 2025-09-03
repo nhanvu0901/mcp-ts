@@ -1,9 +1,10 @@
 import os
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from motor.motor_asyncio import AsyncIOMotorClient
 from services.translation import DocumentTranslator
 from services.utils import get_llm_client
+from fastmcp.server.auth.providers.jwt import JWTVerifier
 
 load_dotenv()
 
@@ -17,11 +18,29 @@ llm_client = get_llm_client()
 
 translator = DocumentTranslator(mongo_client, llm_client)
 
+# auth (https://gofastmcp.com/servers/auth/token-verification#jwks-endpoint-integration)
+public_key = os.getenv("PUBLIC_KEY")
+issuer = os.getenv("ISSUER")
+
+if public_key and public_key.startswith("-----BEGIN CERTIFICATE-----"):
+    verifier = JWTVerifier(
+        public_key=public_key,
+        issuer=issuer,
+    )
+elif public_key:
+    verifier = JWTVerifier(
+        jwks_uri=public_key,
+        issuer=issuer,
+    )
+else:
+    raise ValueError("PUBLIC_KEY environment variable is not set or invalid.")
+
 mcp = FastMCP(
     "DocumentTranslationService",
     instructions="Translate documents by user_id and document_id from MongoDB.",
     host="0.0.0.0",
     port=8004,
+    auth=verifier
 )
 
 @mcp.tool()

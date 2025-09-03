@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "outDir": "dist",
+        "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo",
+        "paths": {
+            "@ai-gateway/auth": [
+                "libs/auth/src/index.js"
+            ]
+        }
+    },
+    "include": [
+        "dist/**/*.js"
+    ],
+    "ts-node": {
+        "require": [
+            "tsconfig-paths/register"
+        ]
+    }
+}

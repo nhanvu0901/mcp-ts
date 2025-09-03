@@ -1,12 +1,12 @@
 import "reflect-metadata";
-import fastify, {type FastifyInstance, type FastifyRequest, type FastifyReply} from "fastify";
+import fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import {createReactAgent} from "@langchain/langgraph/prebuilt";
-import {MultiServerMCPClient} from "@langchain/mcp-adapters";
-import {MongoClient} from "mongodb";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { MultiServerMCPClient } from "@langchain/mcp-adapters";
+import { MongoClient } from "mongodb";
 import api from "./app/routes";
 import dotenv from "dotenv";
 import fp from "fastify-plugin";
@@ -14,6 +14,12 @@ import errorHandlerPlugin from "./app/plugins/errorHandler.plugin";
 import { ChatOpenAI } from "@langchain/openai";
 import { agentPrompt } from "./app/ai_prompt/mcp.agent.promp"
 dotenv.config();
+
+declare module "fastify" {
+    interface FastifyRequest {
+        mcpClient?: MultiServerMCPClient;
+    }
+}
 
 function cleanEnvVar(value: string | undefined): string {
     if (!value) return '';
@@ -34,7 +40,7 @@ const config = {
 
     RAG_MCP_URL: process.env.RAG_MCP_URL as string,
     DOCDB_SUMMARIZATION_MCP_URL: process.env.DOCDB_SUMMARIZATION_MCP_URL as string,
-    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL  as string,
+    DOCUMENT_TRANSLATION_MCP_URL: process.env.DOCUMENT_TRANSLATION_MCP_URL as string,
 
     SWAGGER_HOST: process.env.SWAGGER_HOST,
 
@@ -199,16 +205,25 @@ async function setupMongoClient(): Promise<MongoClient> {
     }
 }
 
-async function setupMCPClient(): Promise<MultiServerMCPClient> {
+async function setupMCPClient(token: string): Promise<MultiServerMCPClient> {
     const client = new MultiServerMCPClient({
         RAGService: {
             url: config.RAG_MCP_URL,
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
         },
         DocDBSummarizationService: {
             url: config.DOCDB_SUMMARIZATION_MCP_URL,
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
         },
         DocumentTranslationService: {
             url: config.DOCUMENT_TRANSLATION_MCP_URL,
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
         },
     });
     return client;
@@ -234,12 +249,18 @@ const aiServicesPlugin = fp(
     async function aiServicesPlugin(fastify: FastifyInstance) {
         const model = setupModel();
         const mongoClient = await setupMongoClient();
-        const mcpClient = await setupMCPClient();
+
+        const apiKey = process.env.API_KEY || "";
+        if (!apiKey) {
+            throw new Error("API_KEY is missing in environment variables");
+        }
+
+        const mcpClient = await setupMCPClient(apiKey);
+        fastify.decorate("mcpClient", mcpClient);
         const agent = await setupAgent(model, mcpClient);
 
         fastify.decorate("model", model);
         fastify.decorate("mongoClient", mongoClient);
-        fastify.decorate("mcpClient", mcpClient);
         fastify.decorate("agent", agent);
     },
     {
@@ -247,6 +268,7 @@ const aiServicesPlugin = fp(
         dependencies: [],
     }
 );
+
 function buildServersArray(): Array<{ url: string; description: string }> {
     const servers = [
         {
@@ -264,6 +286,7 @@ function buildServersArray(): Array<{ url: string; description: string }> {
 
     return servers;
 }
+
 async function registerPlugins(server: FastifyInstance): Promise<void> {
     try {
         await server.register(import("@fastify/compress"), { global: false });
@@ -281,7 +304,6 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
                 }
             }
         });
-
 
         await server.register(swagger, {
             openapi: {
@@ -312,7 +334,6 @@ async function registerPlugins(server: FastifyInstance): Promise<void> {
             },
             staticCSP: true,
         });
-
 
         await server.register(errorHandlerPlugin);
         await server.register(aiServicesPlugin);

@@ -1,4 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import tempfile
@@ -29,6 +32,29 @@ mongo_client = MongoClient(MONGODB_URI)
 mongo_service = MongoService(mongo_client)
 qdrant_host = QDRANT_HOST
 
+public_key = os.getenv("PUBLIC_KEY")
+issuer = os.getenv("ISSUER")
+security = HTTPBearer()
+
+def validate_token(credentials: HTTPAuthorizationCredentials):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(
+            token,
+            public_key,
+            algorithms=["RS256"],
+            options={"verify_aud": False}
+        )
+        if payload.get("iss") != issuer:
+            raise HTTPException(status_code=401, detail="Invalid issuer")
+        
+        sub = payload.get("sub")
+        if not sub:
+            raise HTTPException(status_code=401, detail="Token does not contain 'sub' (sub)")
+        
+        return {"sub": sub, "payload": payload}
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail="Invalid token") from e
 
 # Updated to use LiteLLM proxy
 def get_embedding_model():
@@ -84,8 +110,12 @@ class DocumentOCRUpload(BaseModel):
     use_llm: bool = True
 
 
+def get_sub(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = validate_token(credentials)
+    return token["sub"]
+
 @app.get("/documents/last-30-days")
-async def get_document_references(user_id: str):
+async def get_document_references(user_id: str, sub: dict = Depends(get_sub)):
     """
         Get recent document metadata for a user.
 
@@ -134,7 +164,7 @@ async def get_document_references(user_id: str):
 
 
 @app.post("/collections")
-async def create_collection(collection: CollectionCreate):
+async def create_collection(collection: CollectionCreate, sub: dict = Depends(get_sub)):
     collection_id = str(uuid.uuid4())
 
     try:
@@ -224,7 +254,7 @@ async def create_collection(collection: CollectionCreate):
 
 
 @app.delete("/collections/{collection_id}")
-async def delete_collection(collection_id: str, user_id: str):
+async def delete_collection(collection_id: str, user_id: str, sub: dict = Depends(get_sub)):
     try:
         collection_doc = mongo_service.get_collection(collection_id, user_id)
 
@@ -253,7 +283,7 @@ async def delete_collection(collection_id: str, user_id: str):
 
 
 @app.get("/collections")
-async def list_collections(user_id: str):
+async def list_collections(user_id: str, sub: dict = Depends(get_sub)):
     try:
         collections = mongo_service.list_user_collections(user_id)
 
@@ -511,7 +541,7 @@ async def upload_document_ocr(
 
 
 @app.get("/documents/{document_id}")
-async def get_document_info(document_id: str):
+async def get_document_info(document_id: str, sub: dict = Depends(get_sub)):
     try:
         db = mongo_client[mongo_service.db_name]
         collection = db[mongo_service.DOCUMENTS_COLLECTION]
@@ -538,7 +568,7 @@ async def get_document_info(document_id: str):
 
 
 @app.get("/documents")
-async def list_documents(user_id: str, collection_id: Optional[str] = None):
+async def list_documents(user_id: str, collection_id: Optional[str] = None, sub: dict = Depends(get_sub)):
     try:
         print(f"=== LIST DOCUMENTS ===")
         print(f"User ID: {user_id}")
@@ -571,7 +601,7 @@ async def list_documents(user_id: str, collection_id: Optional[str] = None):
 
 
 @app.post("/documents/query")
-async def query_documents(query: DocumentQuery):
+async def query_documents(query: DocumentQuery, sub: dict = Depends(get_sub)):
     """
     Advanced document query endpoint with flexible search options and filtering
     """
@@ -711,7 +741,7 @@ async def query_documents(query: DocumentQuery):
 
 
 @app.post("/documents/search")
-async def search_documents(search: DocumentSearch):
+async def search_documents(search: DocumentSearch, sub: dict = Depends(get_sub)):
     try:
         if not search.query.strip():
             raise HTTPException(status_code=400, detail="Search query cannot be empty")
@@ -799,7 +829,7 @@ async def search_documents(search: DocumentSearch):
 
 
 @app.delete("/documents/{document_id}")
-async def delete_document(document_id: str, user_id: str):
+async def delete_document(document_id: str, user_id: str, sub: dict = Depends(get_sub)):
     try:
         db = mongo_client[mongo_service.db_name]
         collection = db[mongo_service.DOCUMENTS_COLLECTION]
@@ -839,7 +869,7 @@ async def delete_document(document_id: str, user_id: str):
 
 
 @app.get("/documents/{document_id}/status")
-async def get_document_status(document_id: str):
+async def get_document_status(document_id: str, sub: dict = Depends(get_sub)):
     try:
         db = mongo_client[mongo_service.db_name]
         collection = db[mongo_service.DOCUMENTS_COLLECTION]

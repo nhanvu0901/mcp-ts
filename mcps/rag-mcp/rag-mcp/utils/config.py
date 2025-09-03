@@ -55,6 +55,9 @@ class RAGConfig:
     MAX_CONCURRENT_SEARCHES: int = 5
     SEARCH_TIMEOUT: int = 30
 
+    PUBLIC_KEY = os.getenv("PUBLIC_KEY")
+    ISSUER = os.getenv("ISSUER")
+
     @classmethod
     def get_litellm_config(cls) -> ChatOpenAI:
         """Get LiteLLM proxy configuration for LLM calls"""

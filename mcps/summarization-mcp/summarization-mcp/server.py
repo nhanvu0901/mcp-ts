@@ -1,8 +1,10 @@
 import os
 import sys
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from motor.motor_asyncio import AsyncIOMotorClient
+
+from fastmcp.server.auth.providers.jwt import JWTVerifier
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -17,11 +19,30 @@ if not mongo_uri:
 mongo_client = AsyncIOMotorClient(mongo_uri)
 summarizer = DocumentSummarizer(mongo_client)
 
+# auth (https://gofastmcp.com/servers/auth/token-verification#jwks-endpoint-integration)
+public_key = os.getenv("PUBLIC_KEY")
+issuer = os.getenv("ISSUER")
+
+if public_key and public_key.startswith("-----BEGIN CERTIFICATE-----"):
+    verifier = JWTVerifier(
+        public_key=public_key,
+        issuer=issuer,
+    )
+elif public_key:
+    verifier = JWTVerifier(
+        jwks_uri=public_key,
+        issuer=issuer,
+    )
+else:
+    raise ValueError("PUBLIC_KEY environment variable is not set or invalid.")
+
+
 mcp = FastMCP(
     "DocDBSummarizerService",
     instructions="Summarize documents by user_id and document_id from MongoDB.",
     host="0.0.0.0",
     port=8003,
+    auth=verifier
 )
 
 @mcp.tool()

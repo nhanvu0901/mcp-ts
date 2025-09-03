@@ -13,9 +13,9 @@ services:
             - MONGODB_URI=mongodb://root:rootPass@mongodb:27017/ai_assistant?authSource=admin
             - ALLOWED_ORIGINS=${ALLOWED_ORIGIN}
             - NODE_ENV=development
-            - RAG_MCP_URL=${RAG_MCP_URL}
-            - DOCDB_SUMMARIZATION_MCP_URL=${DOCDB_SUMMARIZATION_MCP_URL}
-            - DOCUMENT_TRANSLATION_MCP_URL=${DOCUMENT_TRANSLATION_MCP_URL}
+            - RAG_MCP_URL=http://rag-mcp:8002/mcp
+            - DOCDB_SUMMARIZATION_MCP_URL=http://summarization-mcp:8003/mcp
+            - DOCUMENT_TRANSLATION_MCP_URL=http://translation-mcp:8004/mcp
             - SWAGGER_HOST=${SWAGGER_HOST}
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}

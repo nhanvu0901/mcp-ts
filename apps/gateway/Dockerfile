@@ -15,11 +15,15 @@ RUN addgroup --system ai-gateway-gateway && \
     adduser --system --ingroup ai-gateway-gateway ai-gateway-gateway
 
 COPY apps/gateway/dist ai-gateway-gateway/
+COPY apps/gateway/tsconfig.docker.json ai-gateway-gateway/
 COPY package*.json ai-gateway-gateway/
 RUN chown -R ai-gateway-gateway:ai-gateway-gateway .
 
 # You can remove this install step if you build with `--bundle` option.
 # The bundled output will include external dependencies.
 RUN npm --prefix ai-gateway-gateway --omit=dev -f install
+
+# Run tsc-alias after dist is copied and dependencies are installed
+RUN npx tsc-alias -p ai-gateway-gateway/tsconfig.docker.json --outDir ai-gateway-gateway/ --verbose
 
 CMD [ "node", "ai-gateway-gateway/main.js" ]

@@ -16,7 +16,7 @@ langchain-openai==0.3.28
 litellm==1.74.7
 
 # MCP Protocol
-mcp==1.12.0
+mcp>=1.12.4
 
 # Document Processing
 PyMuPDF==1.26.3
@@ -50,3 +50,8 @@ pydantic-settings==2.10.1
 # Utilities
 tenacity==9.1.2
 python-dateutil==2.9.0.post0
+httpx>=0.28.1,<1
+
+# Auth
+python-jose>=3.5.0
+fastmcp>=2.11.3
