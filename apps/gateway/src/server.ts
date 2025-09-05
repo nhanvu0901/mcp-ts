@@ -31,7 +31,7 @@ const config = {
     PORT: parseInt(process.env.PORT || "3000"),
     NODE_ENV: process.env.NODE_ENV || "development",
     DEBUG: process.env.DEBUG,
-
+    API_KEY: cleanEnvVar(process.env.API_KEY),
     LITELLM_PROXY_URL: cleanEnvVar(process.env.LITELLM_PROXY_URL),
     LITELLM_MASTER_KEY: cleanEnvVar(process.env.LITELLM_MASTER_KEY),
     LITELLM_APP_KEY: cleanEnvVar(process.env.LITELLM_APP_KEY),
@@ -250,7 +250,7 @@ const aiServicesPlugin = fp(
         const model = setupModel();
         const mongoClient = await setupMongoClient();
 
-        const apiKey = process.env.API_KEY || "";
+        const apiKey = config.API_KEY || "";
         if (!apiKey) {
             throw new Error("API_KEY is missing in environment variables");
         }
@@ -382,18 +382,22 @@ async function buildServer(): Promise<FastifyInstance> {
         }
     };
 
-    for (const signal of ["SIGINT", "SIGTERM"]) {
-        process.on(signal, () => gracefulShutdown(signal));
+    try {
+        for (const signal of ["SIGINT", "SIGTERM"]) {
+            process.on(signal, () => gracefulShutdown(signal));
+        }
+
+        process.on("unhandledRejection", (reason, promise) => {
+            server.log.error({ reason, promise }, "Unhandled Rejection");
+        });
+
+        process.on("uncaughtException", (error) => {
+            server.log.error({ error }, "Uncaught Exception");
+            process.exit(1);
+        });
+    } catch (error) {
+        server.log.warn({ error }, "Failed to setup process event handlers");
     }
-
-    process.on("unhandledRejection", (reason, promise) => {
-        server.log.error({ reason, promise }, "Unhandled Rejection");
-    });
-
-    process.on("uncaughtException", (error) => {
-        server.log.error({ error }, "Uncaught Exception");
-        process.exit(1);
-    });
 
     return server;
 }

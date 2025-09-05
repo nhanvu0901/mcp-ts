@@ -190,7 +190,7 @@ class MongoService:
                 return False
 
             if doc.get("user_id") != user_id:
-                raise ValueError("Not authorized to delete this document")
+                return False
 
             result = collection.delete_one({"_id": document_id})
             return result.deleted_count > 0

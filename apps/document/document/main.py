@@ -47,11 +47,11 @@ def validate_token(credentials: HTTPAuthorizationCredentials):
         )
         if payload.get("iss") != issuer:
             raise HTTPException(status_code=401, detail="Invalid issuer")
-        
+
         sub = payload.get("sub")
         if not sub:
             raise HTTPException(status_code=401, detail="Token does not contain 'sub' (sub)")
-        
+
         return {"sub": sub, "payload": payload}
     except JWTError as e:
         raise HTTPException(status_code=401, detail="Invalid token") from e
@@ -306,7 +306,8 @@ async def upload_document(
     file: UploadFile = File(...),
     user_id: str = Form(...),
     collection_id: Optional[str] = Form(None),
-    embed: bool = Form(True)
+    embed: bool = Form(True),
+    sub: dict = Depends(get_sub)
 ):
     document_id = str(uuid.uuid4())
     temp_file_path = None
@@ -413,7 +414,8 @@ async def upload_document_ocr(
     embed: bool = Form(False),
     # ADD: OCR-specific parameters
     suggested_languages: Optional[str] = Form("eng"),  # Comma-separated string
-    use_llm: bool = Form(True)
+    use_llm: bool = Form(True),
+    sub: dict = Depends(get_sub)
 ):
     """
     Upload and process document using OCR extraction.

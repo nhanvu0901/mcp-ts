@@ -23,6 +23,7 @@ services:
             - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
             - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
             - AZURE_OPENAI_MODEL_API_VERSION=${AZURE_OPENAI_MODEL_API_VERSION}
+            - API_KEY=${API_KEY}
         depends_on:
             - mongodb
             - qdrant
@@ -50,6 +51,8 @@ services:
             - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
             - LLM_EMBEDDING_MODEL=${LLM_EMBEDDING_MODEL}
             - LLM_RERANKER_MODEL=${LLM_RERANKER_MODEL}
+            - PUBLIC_KEY=${PUBLIC_KEY}
+            - ISSUER=${ISSUER}
         volumes:
             - ./tmp:/app/tfidf_models:rw
         depends_on:
@@ -79,6 +82,8 @@ services:
             - LLM_RERANKER_MODEL=${LLM_RERANKER_MODEL}
             - ENABLE_QUERY_EXPANSION=${ENABLE_QUERY_EXPANSION}
             - ENABLE_LLM_RERANKING=${ENABLE_LLM_RERANKING}
+            - PUBLIC_KEY=${PUBLIC_KEY}
+            - ISSUER=${ISSUER}
         volumes:
             - ./tmp:/app/tfidf_models:rw
         depends_on:
@@ -105,6 +110,8 @@ services:
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
             - LLM_CHAT_MODEL=${LLM_CHAT_MODEL}
             - LLM_SUMERIZATION_MODEL=${LLM_SUMERIZATION_MODEL}
+            - PUBLIC_KEY=${PUBLIC_KEY}
+            - ISSUER=${ISSUER}
         depends_on:
             - mongodb
             - qdrant
@@ -128,6 +135,8 @@ services:
             - LITELLM_PROXY_URL=http://litellm:4000
             - LITELLM_APP_KEY=${LITELLM_APP_KEY}
             - LLM_TRANSLATION_MODEL=${LLM_TRANSLATION_MODEL}
+            - PUBLIC_KEY=${PUBLIC_KEY}
+            - ISSUER=${ISSUER}
         depends_on:
             - mongodb
             - qdrant

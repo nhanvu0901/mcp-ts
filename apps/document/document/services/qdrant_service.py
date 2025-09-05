@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
-    VectorParams, Distance, PointStruct,
+    Filter,FieldCondition,MatchValue,VectorParams, Distance, PointStruct,
     SparseVectorParams, SparseIndexParams,
     BinaryQuantization, BinaryQuantizationConfig,
     OptimizersConfigDiff, SparseVector, NamedSparseVector
@@ -339,14 +339,18 @@ class QdrantService:
         try:
             self.client.delete(
                 collection_name=self.collection_name,
-                points_selector={
-                    "filter": {
-                        "must": [
-                            {"key": "document_id", "match": {"value": document_id}},
-                            {"key": "user_id", "match": {"value": user_id}}
-                        ]
-                    }
-                }
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="document_id",
+                            match=MatchValue(value=document_id)
+                        ),
+                        FieldCondition(
+                            key="user_id",
+                            match=MatchValue(value=user_id)
+                        )
+                    ]
+                )
             )
             print(f"Deleted chunks for document_id={document_id}")
             return True
